@@ -32,10 +32,39 @@ def math_rest_samples(limit: int) -> list:
     return rest[:limit]
 
 
+TASK_NAMES = ("math_rest", "humaneval")
+
+
 def math_rest_task(config: GenerateConfig, limit: int):
     task = math(shuffle=False)
     dataset = MemoryDataset(math_rest_samples(limit), name="math_rest")
-    return task_with(task, dataset=dataset, scorer=[math_answer_match()], config=config)
+    return task_with(task, dataset=dataset, scorer=[math_answer_match()], config=config, name="math_rest")
+
+
+def _result_name(log) -> str | None:
+    """Which proxy task an eval log belongs to, from its own task name (or dataset name), never its position."""
+    spec = getattr(log, "eval", None)
+    for raw in (getattr(spec, "task", None), getattr(getattr(spec, "dataset", None), "name", None)):
+        name = str(raw or "").split("/")[-1]
+        if name in TASK_NAMES:
+            return name
+    return None
+
+
+def scores_by_task(results) -> dict:
+    """Accuracy per proxy task; None, with a loud warning, for a task that produced no score."""
+    out = dict.fromkeys(TASK_NAMES)
+    for log in results:
+        name = _result_name(log)
+        if name is None:
+            print(f"WARNING: eval result for unknown task {getattr(getattr(log, 'eval', None), 'task', None)!r} ignored")
+            continue
+        metrics = log.results.scores[0].metrics if log.results and log.results.scores else {}
+        out[name] = metrics["accuracy"].value if "accuracy" in metrics else None
+    for name, value in out.items():
+        if value is None:
+            print(f"WARNING: {'!' * 20} proxy task {name!r} produced NO score (stored as null) {'!' * 20}")
+    return out
 
 
 async def run(args) -> dict:
@@ -55,17 +84,13 @@ async def run(args) -> dict:
     model = Model(api=api, config=config)
     tasks = [
         math_rest_task(config, args.limit),
-        task_with(humaneval(sandbox="local"), config=config, epochs=Epochs(1, "mean")),
+        task_with(humaneval(sandbox="local"), config=config, epochs=Epochs(1, "mean"), name="humaneval"),
     ]
     results = await eval_async(
         tasks=tasks, model=[model], sandbox="local", debug_errors=True, retry_on_error=5,
         fail_on_error=False, log_dir=str(ROOT / "runs" / "inspect-logs"), max_connections=256,
     )
-    out = {"checkpoint_path": args.checkpoint_path}
-    for name, result in zip(["math_rest", "humaneval"], results):
-        metrics = result.results.scores[0].metrics if result.results and result.results.scores else {}
-        out[name] = metrics["accuracy"].value if "accuracy" in metrics else None
-    return out
+    return {"checkpoint_path": args.checkpoint_path, **scores_by_task(results)}
 
 
 def main() -> None:

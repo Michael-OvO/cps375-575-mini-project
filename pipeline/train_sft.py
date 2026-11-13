@@ -87,6 +87,15 @@ def batch_loss(loss_fn_outputs, batch_inputs) -> float:
     return float(-np.dot(logprobs, weights) / max(weights.sum(), 1e-9))
 
 
+def save_state(client, log_path, name: str, step: int) -> str:
+    """Save resumable training state; log and print its path (SaveWeightsResponse.path in tinker 0.39)."""
+    result = client.save_state(name=name, ttl_seconds=STATE_TTL_SECONDS).result()
+    path = getattr(result, "path", None)
+    jsonl.append(log_path, {"step": step, "state_path": path, "state_name": name})
+    print(f"Saved training state at step {step}: {path}")
+    return path
+
+
 def write_checkpoint_info(run_dir, info: dict, published: bool) -> None:
     (run_dir / "checkpoint.json").write_text(json.dumps({**info, "published": published}, indent=2))
 
@@ -124,10 +133,11 @@ def main() -> None:
 
     log_path = run_dir / "train_log.jsonl"
     log_path.write_text("")
-    (run_dir / "checkpoint.json").unlink(missing_ok=True)
 
     service = tinker.ServiceClient()
     client = service.create_lora_training_client(base_model=STUDENT, rank=args.rank).result()
+    # Only now is a new checkpoint certain to follow: a failed start keeps the previous record.
+    (run_dir / "checkpoint.json").unlink(missing_ok=True)
     started = time.time()
 
     for step, idx in enumerate(plan):
@@ -145,7 +155,7 @@ def main() -> None:
         if step % 20 == 0:
             print(f"step {step + 1}/{len(plan)} loss {loss:.4f}")
         if step > 0 and step % SAVE_EVERY == 0:
-            client.save_state(name=f"{args.name}-step{step}", ttl_seconds=STATE_TTL_SECONDS).result()
+            save_state(client, log_path, f"{args.name}-step{step}", step)
 
     info = {"base_model": STUDENT, "rank": args.rank, "lr": base_lr,
             "batch_size": args.batch_size, "steps": len(plan), "train_tokens": train_tokens}

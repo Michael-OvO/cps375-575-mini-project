@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import pytest
 
@@ -115,12 +116,12 @@ def test_code_timeout_matches_public_scorer(monkeypatch):
 
 def _build_math_rest(limit):
     from pipeline import proxy_eval
-    try:
-        return proxy_eval.math_rest_samples(limit)
-    except Exception as exc:  # datasets unavailable offline
-        pytest.skip(f"cannot download datasets: {exc}")
+    return proxy_eval.math_rest_samples(limit)
 
 
+# Loads MATH test and MATH-500 (scoring-only data): opt-in, never part of the default suite.
+@pytest.mark.skipif(os.environ.get("RUN_NETWORK_TESTS") != "1",
+                    reason="loads evaluation datasets; set RUN_NETWORK_TESTS=1 to run")
 def test_math_rest_excludes_math500_and_is_deterministic():
     from datasets import load_dataset
     rest = _build_math_rest(200)
@@ -129,3 +130,15 @@ def test_math_rest_excludes_math500_and_is_deterministic():
     assert len(rest) == 200
     in_500 = set(load_dataset("HuggingFaceH4/MATH-500", split="test")["problem"])
     assert not {s.input for s in rest} & in_500
+
+
+def test_missing_or_empty_dev_file_raises(data_dir, tmp_path):
+    with pytest.raises(ValueError, match="no items"):
+        asyncio.run(dev_eval.evaluate(FixedSampler(), split="dev", limit=0))
+    jsonl.write(tmp_path / "code_dev.jsonl", [{"id": "c-vault", "text": "t", "tests": ["assert True"],
+                                              "vault": True}])
+    with pytest.raises(ValueError, match="code_dev.jsonl"):
+        asyncio.run(dev_eval.evaluate(FixedSampler(), split="dev"))
+    (tmp_path / "if_dev.jsonl").unlink()
+    with pytest.raises(FileNotFoundError, match="if_dev.jsonl"):
+        asyncio.run(dev_eval.evaluate(FixedSampler(), split="vault"))

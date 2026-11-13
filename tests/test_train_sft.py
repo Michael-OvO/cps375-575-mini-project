@@ -198,3 +198,48 @@ def test_missing_or_empty_train_file_raises_before_any_client(tmp_path, monkeypa
     (tmp_path / "r1" / "train.jsonl").write_text("\n")
     with pytest.raises(ValueError, match="no training examples"):
         train_sft.main()
+
+
+def test_save_state_logs_and_prints_path(tmp_path, capsys):
+    import json
+
+    class Client:
+        def save_state(self, name, ttl_seconds):
+            assert ttl_seconds == train_sft.STATE_TTL_SECONDS
+            return _Done(type("S", (), {"path": f"tinker://run/state/{name}"})())
+
+    log = tmp_path / "train_log.jsonl"
+    path = train_sft.save_state(Client(), log, "r1-step250", 250)
+    assert path == "tinker://run/state/r1-step250"
+    assert json.loads(log.read_text()) == {"step": 250, "state_path": path, "state_name": "r1-step250"}
+    assert path in capsys.readouterr().out
+
+
+def test_stale_checkpoint_kept_when_client_creation_fails(tmp_path, monkeypatch):
+    run = tmp_path / "r1"
+    run.mkdir()
+    (run / "train.jsonl").write_text('{"id": "a", "messages": []}\n')
+    (run / "checkpoint.json").write_text('{"checkpoint_path": "tinker://old"}')
+
+    def down():
+        raise RuntimeError("service down")
+
+    monkeypatch.setattr(train_sft, "RUNS", tmp_path)
+    monkeypatch.setattr(train_sft, "build_renderer", lambda: "R")
+    monkeypatch.setattr(train_sft, "render_examples", lambda rows, r: ["d"])
+    monkeypatch.setattr(train_sft, "count_tokens", lambda data: 1)
+    monkeypatch.setattr(train_sft.tinker, "ServiceClient", down)
+    monkeypatch.setattr(train_sft, "parse_args", lambda argv=None: train_sft.argparse.Namespace(
+        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True))
+    with pytest.raises(RuntimeError, match="service down"):
+        train_sft.main()
+    assert (run / "checkpoint.json").exists()
+
+    class Service:
+        def create_lora_training_client(self, base_model, rank):
+            return _Done(object())  # a client with no methods: the loop fails on first use
+
+    monkeypatch.setattr(train_sft.tinker, "ServiceClient", Service)
+    with pytest.raises(AttributeError):
+        train_sft.main()
+    assert not (run / "checkpoint.json").exists()  # removed once the client existed, before training
