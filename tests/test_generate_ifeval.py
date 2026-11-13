@@ -89,3 +89,42 @@ def test_write_base_tasks_parses_list(monkeypatch):
     assert asyncio.run(gi.write_base_tasks(_base_item())) == [
         {"id": "bt-1-1-0", "task": "Write a poem about steeping tea slowly."}
     ]
+
+
+def _rewrite(monkeypatch, prompt, constraints, reply):
+    monkeypatch.setattr(gi, "REWRITE_SHARE", 1.0)
+
+    async def fake(p, **kw):
+        return reply
+
+    import random
+    return asyncio.run(gi.maybe_rewrite(prompt, constraints, random.Random(0), fake))
+
+
+_KW = [{"id": "keywords:include", "kwargs": {"keywords": ["tea", "steam"], "n": 120}}]
+_PROMPT = "Write a short note about brewing. Include the words 'tea' and 'steam'. Use at least 120 words."
+
+
+def test_rewrite_kept_when_values_preserved(monkeypatch):
+    new = "Please draft a brief note on brewing; it has to use 'tea' and 'steam' and run to 120 words or more."
+    assert _rewrite(monkeypatch, _PROMPT, _KW, new) == new
+
+
+def test_rewrite_falls_back_when_number_changed(monkeypatch):
+    new = "Please draft a brief note on brewing; it has to use 'tea' and 'steam' and run to 150 words or more."
+    assert _rewrite(monkeypatch, _PROMPT, _KW, new) == _PROMPT
+
+
+def test_rewrite_falls_back_when_keyword_dropped(monkeypatch):
+    new = "Please draft a brief note on brewing; it has to use the word 'tea' and run to 120 words or more."
+    assert _rewrite(monkeypatch, _PROMPT, _KW, new) == _PROMPT
+
+
+def test_rewrite_falls_back_when_too_long(monkeypatch):
+    new = "tea steam 120 " + "padding " * 60
+    assert _rewrite(monkeypatch, _PROMPT, _KW, new) == _PROMPT
+
+
+def test_rewrite_never_for_repeat_prompt(monkeypatch):
+    cs = [{"id": "combination:repeat_prompt", "kwargs": {"prompt_to_repeat": _PROMPT}}]
+    assert _rewrite(monkeypatch, _PROMPT, cs, "A completely different rewording of the request here.") == _PROMPT

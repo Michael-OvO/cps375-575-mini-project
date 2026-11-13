@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import logging
 import random
+import re
 
 from pipeline import jsonl, teachers
 from pipeline.config import DATA, SEED, is_dev
@@ -66,12 +67,44 @@ as written. Do not add, drop or soften any requirement. Return only the rewritte
 {prompt}"""
 
 
+def _kwarg_values(obj) -> list:
+    """All ints, floats and strings inside constraint kwargs, recursively."""
+    if isinstance(obj, bool):
+        return []
+    if isinstance(obj, (int, float, str)):
+        return [obj]
+    if isinstance(obj, dict):
+        obj = list(obj.values())
+    if isinstance(obj, (list, tuple)):
+        return [v for x in obj for v in _kwarg_values(x)]
+    return []
+
+
+def _preserves(original: str, rewritten: str, constraints: list[dict]) -> bool:
+    """Every number and string from the kwargs that the original prompt shows must survive."""
+    for v in _kwarg_values([c.get("kwargs", {}) for c in constraints]):
+        if isinstance(v, str):
+            if v and v in original and v not in rewritten:
+                return False
+        else:
+            pat = rf"(?<![\d.]){re.escape(str(v))}(?![\d])"
+            if re.search(pat, original) and not re.search(pat, rewritten):
+                return False
+    return True
+
+
 async def maybe_rewrite(prompt: str, constraints: list[dict], rng: random.Random, complete) -> str:
-    """Reword the prompt for a share of items. Skipped when a constraint depends on the prompt text."""
+    """Reword the prompt for a share of items. Skipped when a constraint depends on the prompt text.
+
+    Falls back to the original unless the rewrite has a plausible length and keeps every number
+    and string from the constraint kwargs, so the stored kwargs still describe the prompt.
+    """
     if rng.random() >= REWRITE_SHARE or any(c["id"] == "combination:repeat_prompt" for c in constraints):
         return prompt
     rewritten = await complete(REWRITE_PROMPT.format(prompt=prompt), max_tokens=2000)
-    return rewritten if rewritten and len(rewritten) > 0.5 * len(prompt) else prompt
+    if not rewritten or not (0.5 * len(prompt) < len(rewritten) <= 2 * len(prompt)):
+        return prompt
+    return rewritten if _preserves(prompt, rewritten, constraints) else prompt
 
 
 async def write_base_tasks(item: dict) -> list[dict] | None:
