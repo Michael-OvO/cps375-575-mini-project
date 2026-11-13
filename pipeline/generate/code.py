@@ -1,0 +1,137 @@
+"""Code pool: short function-writing tasks with executed tests.
+
+Usage:
+    python -m pipeline.generate.code write --teachers claude gpt --calls-per-category 40
+    python -m pipeline.generate.code hidden --teachers claude gpt
+"""
+
+import argparse
+import asyncio
+import logging
+
+from pipeline import jsonl, teachers
+from pipeline.config import DATA
+from pipeline.teachers.runner import run_many
+from pipeline.verify import code as vc
+
+RAW = DATA / "code_tasks_raw.jsonl"
+TASKS = DATA / "code_tasks.jsonl"
+
+CATEGORIES = [
+    "string manipulation", "string searching and counting", "string formatting and parsing",
+    "list filtering", "list transformation", "list aggregation", "sorting with custom keys",
+    "searching in sorted lists", "nested lists and matrices", "tuples", "lists of tuples",
+    "dictionaries", "dictionaries of lists", "sets", "number theory", "primes and divisors",
+    "digits of integers", "arithmetic and rounding", "sequences and series", "combinatorics",
+    "geometry formulas", "bit manipulation", "base conversion", "recursion",
+    "simple dynamic programming", "two-pointer techniques", "sliding windows", "stacks and queues",
+    "regular expressions", "character classification", "palindromes and anagrams",
+    "dates and times arithmetic", "intervals and ranges", "frequency counting", "removing duplicates",
+    "merging and zipping collections", "boolean checks and validation", "math with fractions and gcd",
+    "text tokenizing and word statistics", "heap and priority selection",
+]
+
+WRITE_PROMPT = """Write 5 short Python programming tasks in the category: {category}.
+
+Each task is a one-sentence description beginning "Write a function to" or "Write a python function \
+to", a correct reference solution, and exactly 3 assert statements that call the function.
+
+Requirements:
+- Difficulty: entry-level to intermediate; solvable in under 20 lines.
+- Standard library only. No input(), no printing, no files, no randomness, no network.
+- The description must be short and natural, like a textbook exercise. It does not name the \
+function or its parameters: those are fixed by the tests.
+- The asserts must be deterministic and compare with ==.
+- Make the 5 tasks clearly different from each other.
+
+Return only a JSON array of 5 objects with keys "text", "code" and "tests" (a list of 3 strings)."""
+
+HIDDEN_PROMPT = """A Python function is described as follows:
+
+{text}
+
+Its signature is:
+{signature}
+
+These example tests show how it is called:
+{tests}
+
+Write 5 additional assert statements that a correct implementation must pass. Cover edge cases the \
+examples do not. Use only what the description and examples make unambiguous: do not test \
+behaviour the description leaves open. Each assert must compare with ==.
+
+Return only a JSON array of 5 strings."""
+
+
+def _valid(task) -> bool:
+    return (
+        isinstance(task, dict)
+        and isinstance(task.get("text"), str)
+        and isinstance(task.get("code"), str)
+        and isinstance(task.get("tests"), list)
+        and len(task["tests"]) == 3
+        and all(isinstance(t, str) and t.startswith("assert ") for t in task["tests"])
+    )
+
+
+async def write_tasks(item: dict) -> list[dict] | None:
+    reply = await teachers.get(item["author"])(WRITE_PROMPT.format(category=item["category"]))
+    if reply is None:  # refusal, truncation or empty: retry on rerun
+        return None
+    tasks = teachers.parse_json(reply)
+    if not isinstance(tasks, list):
+        return []
+    rows = []
+    for j, task in enumerate(tasks):
+        if not _valid(task):
+            continue
+        code = vc.extract_code(task["code"]).strip()
+        if vc.signature_of(code) and await asyncio.to_thread(vc.run_tests, code, task["tests"]):
+            rows.append({"id": f"{item['id']}-{j}", "text": task["text"].strip(), "code": code,
+                         "tests": task["tests"], "category": item["category"], "author": item["author"]})
+    return rows
+
+
+async def add_hidden(task: dict, teacher_names: list[str]) -> list[dict] | None:
+    others = [n for n in teacher_names if n != task["author"]] or teacher_names
+    prompt = HIDDEN_PROMPT.format(
+        text=task["text"], signature=vc.signature_of(task["code"]), tests="\n".join(task["tests"])
+    )
+    reply = await teachers.get(others[0])(prompt)
+    if reply is None:  # refusal, truncation or empty: retry on rerun
+        return None
+    hidden = teachers.parse_json(reply)
+    if not isinstance(hidden, list):
+        return []
+    hidden = [h for h in hidden if isinstance(h, str) and h.startswith("assert ")]
+    if len(hidden) < 3:
+        return []
+    if not await asyncio.to_thread(vc.run_tests, task["code"], hidden):
+        return []
+    return [dict(task, hidden_tests=hidden)]
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    p = argparse.ArgumentParser()
+    p.add_argument("command", choices=["write", "hidden"])
+    p.add_argument("--teachers", nargs="+", default=["claude", "gpt"])
+    p.add_argument("--calls-per-category", type=int, default=40)
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--concurrency", type=int, default=16)
+    args = p.parse_args()
+
+    if args.command == "write":
+        items = [
+            {"id": f"ct-{ci}-{k}", "category": cat, "author": args.teachers[(ci + k) % len(args.teachers)]}
+            for ci, cat in enumerate(CATEGORIES) for k in range(args.calls_per_category)
+        ][: args.limit]
+        asyncio.run(run_many(items, write_tasks, RAW, args.concurrency))
+    else:
+        items = jsonl.read(RAW)[: args.limit]
+        fn = lambda t: add_hidden(t, args.teachers)  # noqa: E731
+        asyncio.run(run_many(items, fn, TASKS, args.concurrency))
+
+
+if __name__ == "__main__":
+    main()
