@@ -39,7 +39,7 @@ def test_to_example_shapes():
 # ---- end-to-end build() on synthetic pools ----
 
 SIZES = {"math": 20, "ifeval": 8, "code": 10, "general": 5}
-LONG_TASK = "ct-long-0"
+LONG_TASK = next(f"ct-long-{k}" for k in range(1000) if not is_code_dev(f"ct-long-{k}"))
 
 
 def _word_count(messages):
@@ -98,12 +98,17 @@ def test_build_end_to_end(env):
     assert json.loads((env / "t" / "manifest.json").read_text()) == manifest
 
 
-def test_build_drops_too_long(env, monkeypatch):
-    # Use every non-dev code task so the over-long one is certain to be selected.
-    monkeypatch.setattr(select, "is_code_dev", lambda i: i != LONG_TASK and is_code_dev(i))
+def test_build_drops_too_long_and_excludes_dev_code(env):
+    # Request every available code task: no dev id may appear, the over-long one is dropped.
     manifest = select.build("t", {**SIZES, "code": 1000})
     assert manifest["dropped_too_long"] == 1
-    assert LONG_TASK not in {r["id"] for r in _rows(env)}
+    rows = _rows(env)
+    code_ids = {r["id"] for r in rows if r["task"] == "code"}
+    assert LONG_TASK not in code_ids
+    assert not any(is_code_dev(i) for i in code_ids)
+    non_dev = [i for i in (f"ct-{k}-0" for k in range(80)) if not is_code_dev(i)]
+    assert code_ids == set(non_dev)
+    assert manifest["shortfall"]["code"] == 1000 - len(non_dev)
 
 
 def test_build_deterministic(env):
@@ -125,3 +130,61 @@ def test_build_drops_overlap_on_raw_text(env, monkeypatch):
     assert manifest["overlap_filter_enabled"] is True
     assert "if-leak" not in {r["id"] for r in _rows(env)}
     assert sum(r["task"] == "ifeval" for r in _rows(env)) == 5
+
+
+def _general(i, messages):
+    return {"id": f"gen-bad-{i}", "source": "tulu-3:x", "messages": messages}
+
+
+def test_build_drops_invalid_examples(env):
+    u = {"role": "user", "content": "hi"}
+    a = {"role": "assistant", "content": "hello"}
+    bad = [
+        _general(0, [u, a, u]),
+        _general(1, [{"role": "system", "content": "s"}, a]),
+        _general(2, [u, {"role": "assistant", "content": "  \n"}]),
+        _general(3, [u, {"role": "assistant", "content": ["x"]}]),
+    ]
+    good = jsonl.read(select.DATA / "general.jsonl")
+    jsonl.write(select.DATA / "general.jsonl", bad + good)
+    manifest = select.build("t", {**SIZES, "general": 1000})
+    assert manifest["dropped_invalid"] == 4
+    ids = {r["id"] for r in _rows(env)}
+    assert not any(i.startswith("gen-bad-") for i in ids)
+    assert sum(r["task"] == "general" for r in _rows(env)) == len(good)
+
+
+def test_unexpected_math_source_raises(env):
+    rows = jsonl.read(select.DATA / "math_train_solutions.jsonl")
+    rows[3]["source"] = "mystery"
+    jsonl.write(select.DATA / "math_train_solutions.jsonl", rows)
+    with pytest.raises(ValueError, match=rows[3]["id"]):
+        select.build("t", SIZES)
+    assert not (env / "t").exists()
+
+
+def test_source_count_mismatch_raises():
+    sources = [{"name": "a", "count": 2}, {"name": "b", "count": 1}]
+    select._check_counts(sources, [{}] * 3)
+    with pytest.raises(ValueError):
+        select._check_counts(sources, [{}] * 4)
+
+
+def test_backfill_replaces_dropped_candidates(env):
+    u = {"role": "user", "content": "hi"}
+    bad = [_general(i, [u]) for i in range(20)]
+    good = jsonl.read(select.DATA / "general.jsonl")  # 10 valid rows
+    jsonl.write(select.DATA / "general.jsonl", bad + good)
+    manifest = select.build("t", {**SIZES, "general": 10})
+    assert sum(r["task"] == "general" for r in _rows(env)) == 10
+    assert manifest["dropped_invalid"] >= 1
+    assert manifest["shortfall"]["general"] == 0
+    assert manifest["requested"] == {**SIZES, "general": 10}
+
+
+def test_shortfall_reported_when_pool_too_small(env):
+    manifest = select.build("t", {**SIZES, "ifeval": 50, "general": 10})
+    assert manifest["shortfall"]["ifeval"] == 30
+    assert manifest["shortfall"]["general"] == 0
+    assert manifest["shortfall"]["math"] == 0
+    assert sum(r["task"] == "ifeval" for r in _rows(env)) == 20

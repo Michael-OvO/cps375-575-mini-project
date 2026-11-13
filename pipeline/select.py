@@ -43,18 +43,19 @@ def _shortest_per_problem(rows: list[dict]) -> list[dict]:
     return list(best.values())
 
 
-def pick_math(train_rows: list[dict], new_rows: list[dict], n: int, rng: random.Random) -> list[dict]:
+def math_candidates(train_rows: list[dict], new_rows: list[dict], rng: random.Random) -> list[dict]:
+    """Full ordered candidate list: solved train problems first, then new problems weighted to hard levels."""
     train = _shortest_per_problem(train_rows)
     rng.shuffle(train)
-    picked = train[:n]
-    remaining = n - len(picked)
     new = _shortest_per_problem(new_rows)
-    if remaining > 0 and new:
-        # Weighted sampling without replacement: sort by weighted random key.
-        keyed = sorted(new, key=lambda r: rng.random() ** (1.0 / LEVEL_WEIGHT.get(r["level"], 1.0)),
-                       reverse=True)
-        picked += keyed[:remaining]
-    return picked
+    # Weighted sampling without replacement: sort by weighted random key.
+    keyed = sorted(new, key=lambda r: rng.random() ** (1.0 / LEVEL_WEIGHT.get(r["level"], 1.0)),
+                   reverse=True)
+    return train + keyed
+
+
+def pick_math(train_rows: list[dict], new_rows: list[dict], n: int, rng: random.Random) -> list[dict]:
+    return math_candidates(train_rows, new_rows, rng)[:n]
 
 
 def math_example(row: dict, rng: random.Random) -> dict:
@@ -92,6 +93,29 @@ def _token_counter():
     return count
 
 
+MATH_SOURCES = ("math_train", "math_new")
+TASKS = ("math", "code", "ifeval", "general")
+
+
+def _valid(example: dict) -> bool:
+    msgs = example.get("messages")
+    if not isinstance(msgs, list) or len(msgs) != 2:
+        return False
+    for msg, role in zip(msgs, ("user", "assistant")):
+        if not isinstance(msg, dict) or msg.get("role") != role:
+            return False
+        content = msg.get("content")
+        if not isinstance(content, str) or not content.strip():
+            return False
+    return True
+
+
+def _check_counts(sources: list[dict], kept: list[dict]) -> None:
+    total = sum(src["count"] for src in sources)
+    if total != len(kept):
+        raise ValueError(f"manifest source counts ({total}) do not match kept examples ({len(kept)})")
+
+
 def build(name: str, sizes: dict) -> dict:
     rng = random.Random(SEED)
     math_train = _read_pool("math_train_solutions.jsonl")
@@ -102,37 +126,49 @@ def build(name: str, sizes: dict) -> dict:
     for pool in (code_pool, if_pool, general_pool):
         rng.shuffle(pool)
 
-    math_rows = pick_math(math_train, math_new, sizes["math"], rng)
-    code_rows = code_pool[: sizes["code"]]
-    if_rows = if_pool[: sizes["ifeval"]]
-    general_rows = general_pool[: sizes["general"]]
+    math_pool = math_candidates(math_train, math_new, rng)
+    for row in math_pool:
+        if row.get("source") not in MATH_SOURCES:
+            raise ValueError(f"math row {row['id']!r} has unexpected source {row.get('source')!r}")
 
-    # Each candidate: (example, raw text for the overlap filter, manifest source, teacher).
-    # The raw text is never written to train.jsonl.
-    candidates = (
-        [(math_example(r, rng), r["problem"], r.get("source", "math_train"), r.get("teacher")) for r in math_rows]
-        + [(code_example(r, rng), r["text"], "code", None) for r in code_rows]
-        + [(if_example(r), r["prompt"], "instruction_following", r.get("teacher")) for r in if_rows]
-        + [(general_example(r), None, "general", None) for r in general_rows]
-    )
+    # Per task: (pool in selection order, builder -> example, raw text for the overlap filter,
+    # manifest source). The raw text is never written to train.jsonl.
+    plans = {
+        "math": (math_pool, lambda r: math_example(r, rng), lambda r: r["problem"], lambda r: r["source"]),
+        "code": (code_pool, lambda r: code_example(r, rng), lambda r: r["text"], lambda r: "code"),
+        "ifeval": (if_pool, if_example, lambda r: r["prompt"], lambda r: "instruction_following"),
+        "general": (general_pool, general_example, lambda r: None, lambda r: "general"),
+    }
 
     overlap = leakage.load_overlap_filter()
     count = _token_counter()
     kept, per_source, teachers = [], {}, set()
-    dropped_long = dropped_leak = tokens = 0
-    for ex, raw, source, teacher in candidates:
-        if overlap is not None and raw is not None and overlap.is_leak(raw):
-            dropped_leak += 1
-            continue
-        n = count(ex["messages"])
-        if n > MAX_TRAIN_TOKENS:
-            dropped_long += 1
-            continue
-        tokens += n
-        kept.append(ex)
-        per_source[source] = per_source.get(source, 0) + 1
-        if teacher:
-            teachers.add(teacher)
+    kept_per_task = dict.fromkeys(TASKS, 0)
+    dropped_long = dropped_leak = dropped_invalid = tokens = 0
+    for task in TASKS:
+        pool, make, raw_of, source_of = plans[task]
+        for row in pool:
+            if kept_per_task[task] >= sizes[task]:
+                break
+            ex = make(row)
+            if not _valid(ex):
+                dropped_invalid += 1
+                continue
+            raw = raw_of(row)
+            if overlap is not None and raw is not None and overlap.is_leak(raw):
+                dropped_leak += 1
+                continue
+            n = count(ex["messages"])
+            if n > MAX_TRAIN_TOKENS:
+                dropped_long += 1
+                continue
+            tokens += n
+            kept.append(ex)
+            kept_per_task[task] += 1
+            source = source_of(row)
+            per_source[source] = per_source.get(source, 0) + 1
+            if row.get("teacher"):
+                teachers.add(row["teacher"])
     rng.shuffle(kept)
 
     sources = [
@@ -148,11 +184,15 @@ def build(name: str, sizes: dict) -> dict:
          "count": per_source.get("general", 0)},
     ]
     leakage.check_sources(sources)
+    _check_counts(sources, kept)
     manifest = {
         "name": name, "seed": SEED, "sources": sources,
+        "requested": {t: sizes[t] for t in TASKS},
+        "shortfall": {t: max(0, sizes[t] - kept_per_task[t]) for t in TASKS},
         "total_examples": len(kept), "total_tokens": tokens,
         "estimated_cost_usd": round(tokens / 1e6 * TRAIN_PRICE_PER_M, 2),
         "dropped_too_long": dropped_long, "dropped_overlap": dropped_leak,
+        "dropped_invalid": dropped_invalid,
         "overlap_filter_enabled": overlap is not None,
         "teachers": sorted(teachers),
     }
