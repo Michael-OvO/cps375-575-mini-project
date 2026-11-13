@@ -73,7 +73,7 @@ def test_count_tokens_and_render_with_fake_renderer(monkeypatch):
     rows = [{"messages": [1, 2]}, {"messages": [1, 2, 3, 4]}]
     data = train_sft.render_examples(rows, "R")
     assert train_sft.count_tokens(data) == 6
-    assert all(c[1] == "R" and c[2] == train_sft.MAX_TRAIN_TOKENS for c in calls)
+    assert all(c[1] == "R" and c[2] is None for c in calls)
     assert all(c[3] == train_sft.renderers.TrainOnWhat.ALL_ASSISTANT_MESSAGES for c in calls)
 
 
@@ -106,3 +106,78 @@ def test_real_rendering_weights_only_on_assistant_with_stop(real_renderer):
         # targets are shifted by one, so the leading "User" token is input only
         assert "Assistant:" in unsupervised
         assert "Assistant:" not in supervised
+
+
+def test_overlong_example_is_rejected_not_truncated(monkeypatch):
+    class FakeInput:
+        def __init__(self, n):
+            self.n = n
+
+        def to_ints(self):
+            return list(range(self.n))
+
+    class FakeDatum:
+        def __init__(self, n):
+            self.model_input = FakeInput(n)
+
+    monkeypatch.setattr(train_sft, "conversation_to_datum",
+                        lambda m, r, max_length, train_on_what: FakeDatum(m[0]))
+    rows = [{"id": "ok", "messages": [10]},
+            {"id": "too-long-1", "messages": [train_sft.MAX_TRAIN_TOKENS + 1]}]
+    with pytest.raises(ValueError, match=r"1 of 2.*too-long-1.*pipeline\.select"):
+        train_sft.render_examples(rows, "R")
+    assert len(train_sft.render_examples(rows[:1], "R")) == 1
+
+
+def test_real_overlong_example_rejected(real_renderer):
+    rows = [{"id": "big", "messages": [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "word " * (train_sft.MAX_TRAIN_TOKENS + 50)}]}]
+    with pytest.raises(ValueError, match="big"):
+        train_sft.render_examples(rows, real_renderer)
+
+
+class _Done:
+    def __init__(self, value):
+        self.value = value
+
+    def result(self):
+        return self.value
+
+
+class _FakeClient:
+    def save_weights_for_sampler(self, name):
+        return _Done(type("C", (), {"path": f"tinker://run/{name}"})())
+
+
+_INFO = {"base_model": "m", "rank": 32}
+
+
+def _read(run_dir):
+    import json
+    return json.loads((run_dir / "checkpoint.json").read_text())
+
+
+def test_publish_failure_keeps_checkpoint_path(tmp_path):
+    def boom(path):
+        raise RuntimeError("publish down")
+
+    with pytest.raises(RuntimeError):
+        train_sft.save_and_publish(_FakeClient(), boom, tmp_path, "r1", _INFO, False)
+    info = _read(tmp_path)
+    assert info["checkpoint_path"] == "tinker://run/r1" and info["published"] is False
+
+
+def test_publish_success_marks_published(tmp_path):
+    seen = []
+    out = train_sft.save_and_publish(_FakeClient(), seen.append, tmp_path, "r1", _INFO, False)
+    assert seen == ["tinker://run/r1"] and out["published"] is True
+    assert _read(tmp_path)["published"] is True
+
+
+def test_no_publish_writes_false_and_skips_publish(tmp_path):
+    def boom(path):
+        raise AssertionError("must not publish")
+
+    out = train_sft.save_and_publish(_FakeClient(), boom, tmp_path, "r1", _INFO, True)
+    assert out["published"] is False and _read(tmp_path)["published"] is False

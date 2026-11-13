@@ -47,11 +47,22 @@ def build_renderer():
 
 
 def render_examples(rows: list[dict], renderer) -> list:
-    return [
-        conversation_to_datum(r["messages"], renderer, max_length=MAX_TRAIN_TOKENS,
+    """Render untruncated (max_length=None); over-long examples are rejected, never cut."""
+    data = [
+        conversation_to_datum(r["messages"], renderer, max_length=None,
                               train_on_what=renderers.TrainOnWhat.ALL_ASSISTANT_MESSAGES)
         for r in rows
     ]
+    over = [(r.get("id", i), len(d.model_input.to_ints()))
+            for i, (r, d) in enumerate(zip(rows, data))
+            if len(d.model_input.to_ints()) > MAX_TRAIN_TOKENS]
+    if over:
+        shown = ", ".join(f"{i} ({n} tokens)" for i, n in over[:5])
+        raise ValueError(
+            f"{len(over)} of {len(rows)} training examples exceed {MAX_TRAIN_TOKENS} tokens "
+            f"(first: {shown}). Truncation would cut off the answer and the stop sequence. "
+            "Rebuild the training file with pipeline.select, which drops over-long examples.")
+    return data
 
 
 def count_tokens(data: list) -> int:
@@ -65,23 +76,47 @@ def batch_loss(loss_fn_outputs, batch_inputs) -> float:
     return float(-np.dot(logprobs, weights) / max(weights.sum(), 1e-9))
 
 
+def write_checkpoint_info(run_dir, info: dict, published: bool) -> None:
+    (run_dir / "checkpoint.json").write_text(json.dumps({**info, "published": published}, indent=2))
+
+
+def save_and_publish(client, publish, run_dir, name: str, info: dict, no_publish: bool) -> dict:
+    """Save sampler weights, record the path at once, then publish (checkpoint.json updated after)."""
+    checkpoint = client.save_weights_for_sampler(name=name).result()
+    info = {"checkpoint_path": checkpoint.path, **info}
+    write_checkpoint_info(run_dir, info, False)
+    print(f"Saved sampler checkpoint: {checkpoint.path}")
+    if not no_publish:
+        try:
+            publish(checkpoint.path)
+        except Exception:
+            print(f"Checkpoint exists at {checkpoint.path} and still needs publishing "
+                  "(checkpoint.json says published: false).")
+            raise
+        write_checkpoint_info(run_dir, info, True)
+    return {**info, "published": not no_publish}
+
+
 def main() -> None:
     args = parse_args()
 
     run_dir = RUNS / args.name
     rows = jsonl.read(run_dir / "train.jsonl")
-    base_lr = args.lr or hyperparam_utils.get_lr(STUDENT)
+    base_lr = args.lr if args.lr is not None else hyperparam_utils.get_lr(STUDENT)
     renderer = build_renderer()
 
     print(f"Rendering {len(rows)} examples...")
-    data = render_examples(rows, renderer)
+    data = render_examples(rows, renderer)  # raises on over-long examples, before any client exists
     train_tokens = count_tokens(data)
     plan = batches(len(data), args.batch_size)
     print(f"{len(plan)} steps, {train_tokens / 1e6:.1f}M tokens, lr {base_lr:.2e}, rank {args.rank}")
 
+    log_path = run_dir / "train_log.jsonl"
+    log_path.write_text("")
+    (run_dir / "checkpoint.json").unlink(missing_ok=True)
+
     service = tinker.ServiceClient()
     client = service.create_lora_training_client(base_model=STUDENT, rank=args.rank).result()
-    log_path = run_dir / "train_log.jsonl"
     started = time.time()
 
     for step, idx in enumerate(plan):
@@ -101,16 +136,14 @@ def main() -> None:
         if step > 0 and step % SAVE_EVERY == 0:
             client.save_state(name=f"{args.name}-step{step}", ttl_seconds=STATE_TTL_SECONDS).result()
 
-    checkpoint = client.save_weights_for_sampler(name=args.name).result()
-    published = False
-    if not args.no_publish:
-        tinker.RestClient().publish_checkpoint_from_tinker_path(checkpoint.path).result()
-        published = True
-    info = {"checkpoint_path": checkpoint.path, "base_model": STUDENT, "rank": args.rank,
-            "lr": base_lr, "batch_size": args.batch_size, "steps": len(plan),
-            "published": published, "train_tokens": train_tokens}
-    (run_dir / "checkpoint.json").write_text(json.dumps(info, indent=2))
-    print(json.dumps(info, indent=2))
+    info = {"base_model": STUDENT, "rank": args.rank, "lr": base_lr,
+            "batch_size": args.batch_size, "steps": len(plan), "train_tokens": train_tokens}
+
+    def publish(path: str) -> None:
+        tinker.RestClient().publish_checkpoint_from_tinker_path(path).result()
+
+    final = save_and_publish(client, publish, run_dir, args.name, info, args.no_publish)
+    print(json.dumps(final, indent=2))
 
 
 if __name__ == "__main__":
