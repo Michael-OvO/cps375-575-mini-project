@@ -25,3 +25,8 @@ logs/
 inspect-logs/
 evaluation/checkpoint_info.json
 evaluation/baseline_results.json
+
+# Pipeline outputs
+data/
+runs/**/train.jsonl
+runs/**/*.log
