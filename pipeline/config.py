@@ -24,6 +24,16 @@ EXCLUDED_DATASETS = (
     "google-research-datasets/mbpp",
 )
 
+# Exact dataset ids that may be used as training sources (checked case-sensitively).
+ALLOWED_TRAIN_DATASETS = (
+    "DigitalLearningGmbH/MATH-lighteval",
+    "allenai/tulu-3-sft-mixture",
+    "teacher-generated",
+)
+
+# Lower-case fragments that disqualify a training source by dataset id or source name.
+EXCLUDED_KEYWORDS = ("mbpp", "ifeval", "math-500", "math500", "humaneval", "ifbench")
+
 
 def _bucket(item_id: str, salt: str) -> int:
     digest = hashlib.sha256(f"{salt}:{item_id}".encode()).hexdigest()
