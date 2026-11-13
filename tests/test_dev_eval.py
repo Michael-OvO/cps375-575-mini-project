@@ -142,3 +142,17 @@ def test_missing_or_empty_dev_file_raises(data_dir, tmp_path):
     (tmp_path / "if_dev.jsonl").unlink()
     with pytest.raises(FileNotFoundError, match="if_dev.jsonl"):
         asyncio.run(dev_eval.evaluate(FixedSampler(), split="vault"))
+
+
+def test_main_validates_dev_files_before_creating_sampler(data_dir, tmp_path, monkeypatch):
+    import sys
+    from pipeline import student
+    (tmp_path / "if_dev.jsonl").unlink()
+
+    def no_sampler(*a, **k):
+        raise AssertionError("Sampler created before the dev files were checked")
+
+    monkeypatch.setattr(student, "Sampler", no_sampler)
+    monkeypatch.setattr(sys, "argv", ["dev_eval", "--out", str(tmp_path / "out.json")])
+    with pytest.raises(FileNotFoundError, match="if_dev.jsonl"):
+        dev_eval.main()

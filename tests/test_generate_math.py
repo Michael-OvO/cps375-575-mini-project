@@ -174,3 +174,11 @@ def test_split_solution_cleans_answer():
     assert gm.split_solution(f"{body}\nANSWER: $a$ or $b$") == (body, "$a$ or $b$")
     assert gm.split_solution(f"{body}\nANSWER: $$") is None
     assert gm.split_solution(f"{body}\nANSWER: **.**") is None
+
+
+def test_write_problems_rejects_tabs(monkeypatch):
+    item = {"id": "mn-0", "subject": "Algebra", "level": 2, "seeds": ["a", "b", "c"], "author": "claude"}
+    reply = '["Find the value of x\\t when x plus three equals ten exactly.", "Find y if y + 1 = 4 and y is real."]'
+    monkeypatch.setattr(gm.teachers, "get", _fixed({"claude": [reply]}))
+    rows = asyncio.run(gm.write_problems(item))
+    assert [r["problem"] for r in rows] == ["Find y if y + 1 = 4 and y is real."]

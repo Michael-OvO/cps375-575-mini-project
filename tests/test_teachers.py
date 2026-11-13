@@ -72,6 +72,7 @@ def test_parse_json_repairs_single_backslash_latex():
     reply = r'["\frac{1}{2} \times \sqrt{2}", "\\frac{3}{4}"]'
     assert teachers.parse_json(reply) == [r"\frac{1}{2} \times \sqrt{2}", r"\frac{3}{4}"]
     assert teachers.parse_json(r'["$\nu \neq \rho \beta$"]') == [r"$\nu \neq \rho \beta$"]
+    assert teachers.parse_json(r'["Find \frac{1}{2}.\nThen \times 2."]') == ["Find \\frac{1}{2}.\nThen \\times 2."]
     # Valid escapes are kept: \n before a non-letter, \" and é.
     assert teachers.parse_json(r'["a\n1", "say \"hi\"", "café"]') == ["a\n1", 'say "hi"', "café"]
 
@@ -85,12 +86,32 @@ def test_parse_json_code_mode_keeps_newlines():
 def test_parse_json_never_returns_inner_bracket_of_failed_parse():
     assert teachers.parse_json('[{"a": 1}, {"b": oops}]') is None
     assert teachers.parse_json('["one", ["two"], "trunc') is None  # truncated outer array
-    assert teachers.parse_json('See [the list below]: ["x", "y"]') == ["x", "y"]
+    # Only a value starting at the first bracket counts: a bracket in the prose makes the candidate fail.
+    assert teachers.parse_json('See [the list below]: ["x", "y"]') is None
+    assert teachers.parse_json('Here are the problems: ["x", "y"] Done.') == ["x", "y"]
+    assert teachers.parse_json('Sure [note]\n```json\n["x"]\n```') == ["x"]  # fenced block first
+
+
+def test_parse_json_malformed_quote_returns_none():
+    assert teachers.parse_json('["a"b", "]x [0, 1]"]') is None
+
+
+def test_parse_json_latex_n_commands_vs_real_newlines():
+    assert teachers.parse_json(r'["Line one.\nLine two has x."]') == ["Line one.\nLine two has x."]
+    assert teachers.parse_json(r'["\\frac{1}{2}\nThen find $x$."]') == ["\\frac{1}{2}\nThen find $x$."]
+    assert teachers.parse_json(r'["Given this.\n\nFind $y$."]') == ["Given this.\n\nFind $y$."]
+    reply = r'["$\nu$", "$x \neq 0$", "$\nabla f$", "$a \not\in B$", "a\newline b", "$\notin$"]'
+    assert teachers.parse_json(reply) == [r"$\nu$", r"$x \neq 0$", r"$\nabla f$", r"$a \not\in B$",
+                                         r"a\newline b", r"$\notin$"]
+    assert teachers.parse_json(r'["end \nu"]') == [r"end \nu"]  # command at end of string
+    assert teachers.parse_json(r'["$\rho$ and $\beta$"]') == [r"$\rho$ and $\beta$"]
 
 
 def test_has_control_chars():
     assert teachers.has_control_chars("a\x0cb") and teachers.has_control_chars("a\tb")
     assert not teachers.has_control_chars("line one\nline two\r\n")
+    assert not teachers.has_control_chars("a\tb", allow_tab=True)
+    assert teachers.has_control_chars("a\x0cb", allow_tab=True)
 
 
 def _clear_teacher_env(monkeypatch, tmp_path):

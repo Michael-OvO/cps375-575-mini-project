@@ -79,13 +79,14 @@ def _load(name: str, split: str, limit: int | None) -> list[dict]:
     return rows
 
 
+def load_split(split: str = "dev", limit: int | None = None) -> tuple[list, list, list]:
+    """(math, code, instruction following) dev items; raises on a missing or empty file."""
+    return (_load("math_dev.jsonl", split, limit), _load("code_dev.jsonl", split, limit),
+            _load("if_dev.jsonl", split, limit))
+
+
 async def evaluate(sampler, split: str = "dev", limit: int | None = None) -> dict:
-    return await score_items(
-        sampler,
-        _load("math_dev.jsonl", split, limit),
-        _load("code_dev.jsonl", split, limit),
-        _load("if_dev.jsonl", split, limit),
-    )
+    return await score_items(sampler, *load_split(split, limit))
 
 
 def main() -> None:
@@ -97,7 +98,8 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--out", required=True)
     args = p.parse_args()
-    result = asyncio.run(evaluate(Sampler(STUDENT, args.checkpoint_path), args.split, args.limit))
+    items = load_split(args.split, args.limit)  # validate the dev files before any Tinker client exists
+    result = asyncio.run(score_items(Sampler(STUDENT, args.checkpoint_path), *items))
     result["checkpoint_path"] = args.checkpoint_path
     result["split"] = args.split
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)

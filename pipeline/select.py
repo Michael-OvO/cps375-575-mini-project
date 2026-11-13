@@ -176,7 +176,7 @@ def _valid(example: dict) -> bool:
         if not isinstance(msg, dict) or msg.get("role") != role:
             return False
         content = msg.get("content")
-        if not isinstance(content, str) or not content.strip() or has_control_chars(content):
+        if not isinstance(content, str) or not content.strip() or has_control_chars(content, allow_tab=True):
             return False
     return True
 

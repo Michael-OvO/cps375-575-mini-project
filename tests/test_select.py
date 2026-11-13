@@ -215,11 +215,16 @@ def test_build_drops_examples_with_control_characters(env):
     bad = [_general(0, [{"role": "user", "content": "compute \x0crac{1}{2}"},
                         {"role": "assistant", "content": "half " * 30}]),
            _general(1, [{"role": "user", "content": "hello there"},
-                        {"role": "assistant", "content": "tab\there " * 30}])]
-    jsonl.write(select.DATA / "general.jsonl", bad + good)
+                        {"role": "assistant", "content": "bell\x07here " * 30}])]
+    tabbed = {"id": "gen-tab", "source": "tulu-3:x", "messages": [
+        {"role": "user", "content": "format this table"},
+        {"role": "assistant", "content": "col\tvalue " * 30}]}
+    jsonl.write(select.DATA / "general.jsonl", bad + good + [tabbed])
     manifest = build("t", {**SIZES, "general": 1000})
     assert manifest["dropped_invalid"] == 2
-    assert not any(r["id"].startswith("gen-bad-") for r in _rows(env))
+    ids = {r["id"] for r in _rows(env)}
+    assert not any(i.startswith("gen-bad-") for i in ids)
+    assert "gen-tab" in ids  # tabs are legitimate outside new math problems
 
 
 # ---- overlap decision gate (B1) ----
