@@ -12,6 +12,13 @@ def test_append_read_and_done(tmp_path):
     assert jsonl.read(tmp_path / "missing.jsonl") == []
 
 
+def test_append_many_single_write(tmp_path):
+    p = tmp_path / "sub" / "m.jsonl"
+    jsonl.append_many(p, [{"id": "x"}, {"id": "y"}])
+    jsonl.append_many(p, [])
+    assert jsonl.read(p) == [{"id": "x"}, {"id": "y"}]
+
+
 def test_split_helpers_are_deterministic():
     ids = [f"item-{i}" for i in range(5000)]
     dev = [i for i in ids if config.is_dev(i, 100)]

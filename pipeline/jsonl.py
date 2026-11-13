@@ -19,6 +19,18 @@ def append(path, row: dict) -> None:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def append_many(path, rows) -> None:
+    """Append all rows in a single write call so an item's rows land together."""
+    rows = list(rows)
+    if not rows:
+        return
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
+    with path.open("a") as f:
+        f.write(data)
+
+
 def write(path, rows) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
