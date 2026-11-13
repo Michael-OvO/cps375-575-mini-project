@@ -188,3 +188,15 @@ def test_shortfall_reported_when_pool_too_small(env):
     assert manifest["shortfall"]["general"] == 0
     assert manifest["shortfall"]["math"] == 0
     assert sum(r["task"] == "ifeval" for r in _rows(env)) == 20
+
+
+def test_build_drops_examples_with_control_characters(env):
+    good = jsonl.read(select.DATA / "general.jsonl")
+    bad = [_general(0, [{"role": "user", "content": "compute \x0crac{1}{2}"},
+                        {"role": "assistant", "content": "half " * 30}]),
+           _general(1, [{"role": "user", "content": "hello there"},
+                        {"role": "assistant", "content": "tab\there " * 30}])]
+    jsonl.write(select.DATA / "general.jsonl", bad + good)
+    manifest = select.build("t", {**SIZES, "general": 1000})
+    assert manifest["dropped_invalid"] == 2
+    assert not any(r["id"].startswith("gen-bad-") for r in _rows(env))

@@ -3,8 +3,10 @@
 from openai import AsyncOpenAI
 
 from pipeline.config import GPT_MODEL
+from pipeline.teachers import new_usage, record_usage
 
 _client: AsyncOpenAI | None = None
+USAGE = new_usage()  # calls, tokens and served model ids, for this process
 
 
 def _get_client() -> AsyncOpenAI:
@@ -23,6 +25,7 @@ async def complete(
     if system:
         kwargs["instructions"] = system
     response = await _get_client().responses.create(**kwargs)
+    record_usage(USAGE, response)
     if getattr(response, "status", "completed") != "completed":
         return None
     text = (response.output_text or "").strip()

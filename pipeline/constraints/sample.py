@@ -34,6 +34,8 @@ STANDARD_GROUPS = {
     "punctuation:no_comma": "chars",
     "startend:quotation": "wrap",
 }
+# A whole-response wrapper (JSON, quotes, code fence, ...) contradicts a required start or end.
+WRAP_CONFLICTS = {"start", "end"}
 K_WEIGHTS = [(1, 0.20), (2, 0.35), (3, 0.30), (4, 0.15)]
 STANDARD_IDS = sorted(STANDARD_GROUPS)
 TRAIN_EXTRA_IDS = sorted(i for i, e in extra.REGISTRY.items() if not e.dev_only)
@@ -78,6 +80,8 @@ def sample_constraints(rng: random.Random, base_task: str, mode: str = "train") 
         cid = rng.choice(pool)
         group = group_of(cid)
         if group in groups:
+            continue
+        if (group == "wrap" and groups & WRAP_CONFLICTS) or (group in WRAP_CONFLICTS and "wrap" in groups):
             continue
         chosen.append(cid)
         groups.add(group)

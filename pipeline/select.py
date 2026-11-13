@@ -12,6 +12,7 @@ import random
 from pipeline import formats, jsonl, leakage
 from pipeline.config import DATA, MAX_TRAIN_TOKENS, RUNS, SEED, STUDENT
 from pipeline.dev import is_code_dev
+from pipeline.teachers import has_control_chars
 
 MIN_SOLUTION_WORDS = 40
 LEVEL_WEIGHT = {1: 1.0, 2: 1.0, 3: 1.5, 4: 2.0, 5: 2.5}
@@ -105,7 +106,7 @@ def _valid(example: dict) -> bool:
         if not isinstance(msg, dict) or msg.get("role") != role:
             return False
         content = msg.get("content")
-        if not isinstance(content, str) or not content.strip():
+        if not isinstance(content, str) or not content.strip() or has_control_chars(content):
             return False
     return True
 

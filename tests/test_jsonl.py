@@ -26,3 +26,33 @@ def test_split_helpers_are_deterministic():
     assert dev == [i for i in ids if config.is_dev(i, 100)]
     vault = [i for i in dev if config.is_vault(i)]
     assert 0.2 < len(vault) / len(dev) < 0.47
+
+
+def test_read_skips_only_a_truncated_final_line(tmp_path):
+    import pytest
+    p = tmp_path / "t.jsonl"
+    p.write_text('{"id": "a"}\n{"id": "b", "v": "café"}\n{"id": "c", "v": [1, 2', encoding="utf-8")
+    assert jsonl.read(p) == [{"id": "a"}, {"id": "b", "v": "café"}]
+    p.write_text('{"id": "a"}\n{"id": broken}\n{"id": "c"}\n', encoding="utf-8")
+    with pytest.raises(ValueError):
+        jsonl.read(p)
+
+
+def test_utf8_round_trip(tmp_path):
+    p = tmp_path / "u.jsonl"
+    jsonl.write(p, [{"id": "x", "t": "π ≤ 4 — ok"}])
+    jsonl.append(p, {"id": "y", "t": "日本"})
+    assert [r["t"] for r in jsonl.read(p)] == ["π ≤ 4 — ok", "日本"]
+    assert "π" in p.read_bytes().decode("utf-8")
+
+
+def test_append_after_torn_write_keeps_file_readable(tmp_path):
+    p = tmp_path / "t.jsonl"
+    p.write_text('{"id": "a"}\n{"id": "c", "v": [1, 2', encoding="utf-8")
+    jsonl.append_many(p, [{"id": "d"}])
+    jsonl.append(p, {"id": "e"})
+    assert [r["id"] for r in jsonl.read(p)] == ["a", "d", "e"]
+    q = tmp_path / "q.jsonl"
+    q.write_text('{"id": "a"}', encoding="utf-8")  # complete row, just no newline
+    jsonl.append(q, {"id": "b"})
+    assert [r["id"] for r in jsonl.read(q)] == ["a", "b"]

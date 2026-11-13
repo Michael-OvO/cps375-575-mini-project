@@ -3,6 +3,10 @@ import json
 
 from pipeline.generate import code as gc
 
+def _item():
+    return dict(gc.write_items(["claude"], 1)[0], id="ct-0", category="arithmetic")
+
+
 TASK = {
     "text": "Write a function to double a number.",
     "code": "def double(n):\n    return n * 2",
@@ -17,7 +21,7 @@ def test_write_tasks_filters_failing(monkeypatch):
         return json.dumps([TASK, bad, {"text": "broken"}])
 
     monkeypatch.setattr(gc.teachers, "get", lambda name: fake)
-    rows = asyncio.run(gc.write_tasks({"id": "ct-0", "category": "arithmetic", "author": "claude"}))
+    rows = asyncio.run(gc.write_tasks(_item()))
     assert len(rows) == 1 and rows[0]["id"] == "ct-0-0" and rows[0]["code"] == TASK["code"]
 
 
@@ -43,7 +47,7 @@ def test_write_tasks_returns_none_when_teacher_returns_nothing(monkeypatch):
         return None
 
     monkeypatch.setattr(gc.teachers, "get", lambda name: nothing)
-    assert asyncio.run(gc.write_tasks({"id": "ct-0", "category": "arithmetic", "author": "claude"})) is None
+    assert asyncio.run(gc.write_tasks(_item())) is None
 
 
 def test_write_tasks_returns_empty_on_unparseable_reply(monkeypatch):
@@ -51,7 +55,7 @@ def test_write_tasks_returns_empty_on_unparseable_reply(monkeypatch):
         return "not json at all"
 
     monkeypatch.setattr(gc.teachers, "get", lambda name: junk)
-    assert asyncio.run(gc.write_tasks({"id": "ct-0", "category": "arithmetic", "author": "claude"})) == []
+    assert asyncio.run(gc.write_tasks(_item())) == []
 
 
 def test_add_hidden_returns_none_when_teacher_returns_nothing(monkeypatch):
@@ -62,3 +66,46 @@ def test_add_hidden_returns_none_when_teacher_returns_nothing(monkeypatch):
 
     monkeypatch.setattr(gc.teachers, "get", lambda name: nothing)
     assert asyncio.run(gc.add_hidden(task, ["claude", "gpt"])) is None
+
+
+def test_write_prompts_all_differ_and_items_interleave():
+    items = gc.write_items(["claude", "gpt"], 45)
+    assert len({it["id"] for it in items}) == len(items) == 45 * len(gc.CATEGORIES)
+    for cat in gc.CATEGORIES:
+        prompts = [gc.write_prompt(it) for it in items if it["category"] == cat]
+        assert len(set(prompts)) == 45
+        assert len({(it["shape"], it["framing"]) for it in items if it["category"] == cat}) == 45
+    pilot = items[:len(gc.CATEGORIES)]
+    assert {it["category"] for it in pilot} == set(gc.CATEGORIES)
+    text = gc.write_prompt(items[0])
+    assert '"Write a function to"' in text and "Write a python function" in text
+    assert "most common textbook exercises" in text and "exactly 3 assert statements" in text
+
+
+def test_write_tasks_rejects_asserts_that_do_not_call_the_function(monkeypatch):
+    vacuous = dict(TASK, tests=["assert double(2) == 4", "assert double(0) == 0", "assert True == True"])
+
+    async def fake(prompt, **kw):
+        return json.dumps([vacuous, TASK])
+
+    monkeypatch.setattr(gc.teachers, "get", lambda name: fake)
+    rows = asyncio.run(gc.write_tasks(_item()))
+    assert [r["id"] for r in rows] == ["ct-0-1"]
+
+
+def test_add_hidden_filters_dedupes_and_caps(monkeypatch):
+    task = dict(TASK, id="ct-0-0", category="arithmetic", author="claude")
+    real = [f"assert double({i}) == {2 * i}" for i in range(1, 11)]
+
+    async def reply(prompt, **kw):
+        return json.dumps(["assert 1 == 1", "assert len([1]) == 1", real[0], real[0]] + real[1:])
+
+    monkeypatch.setattr(gc.teachers, "get", lambda name: reply)
+    rows = asyncio.run(gc.add_hidden(task, ["claude", "gpt"]))
+    assert rows[0]["hidden_tests"] == real[:8]
+
+    async def too_few(prompt, **kw):
+        return json.dumps(["assert 1 == 1", "assert True", real[0], real[0], real[1]])
+
+    monkeypatch.setattr(gc.teachers, "get", lambda name: too_few)
+    assert asyncio.run(gc.add_hidden(task, ["claude", "gpt"])) == []

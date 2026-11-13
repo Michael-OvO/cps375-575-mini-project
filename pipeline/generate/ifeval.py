@@ -21,6 +21,9 @@ BASE = DATA / "if_base_tasks.jsonl"
 RESPONSES = DATA / "if_responses.jsonl"
 DEV_PER_MILLE = 80
 ATTEMPTS = 3
+# Teacher thinking counts against max_tokens, so both calls get the full budget.
+RESPONSE_MAX_TOKENS = 16000
+REWRITE_MAX_TOKENS = 16000
 
 SYSTEM = (
     "Follow every instruction in the user's message exactly, including every formatting, length and "
@@ -101,7 +104,7 @@ async def maybe_rewrite(prompt: str, constraints: list[dict], rng: random.Random
     """
     if rng.random() >= REWRITE_SHARE or any(c["id"] == "combination:repeat_prompt" for c in constraints):
         return prompt
-    rewritten = await complete(REWRITE_PROMPT.format(prompt=prompt), max_tokens=2000)
+    rewritten = await complete(REWRITE_PROMPT.format(prompt=prompt), max_tokens=REWRITE_MAX_TOKENS)
     if not rewritten or not (0.5 * len(prompt) < len(rewritten) <= 2 * len(prompt)):
         return prompt
     return rewritten if _preserves(prompt, rewritten, constraints) else prompt
@@ -111,7 +114,7 @@ async def write_base_tasks(item: dict) -> list[dict] | None:
     reply = await teachers.get(item["teacher"])(BASE_PROMPT.format(topic=item["topic"], form=item["form"]))
     if not reply:
         return None  # teacher returned nothing: retry on rerun
-    tasks = teachers.parse_json(reply)
+    tasks = teachers.parse_json(reply, latex=False)  # plain prose, no LaTeX
     if not isinstance(tasks, list):
         return []
     return [
@@ -128,13 +131,14 @@ async def respond(item: dict) -> list[dict] | None:
     prompt = await maybe_rewrite(render_prompt(item["task"], constraints), stored, rng, complete)
     got_response = False
     for _ in range(ATTEMPTS):
-        response = await complete(prompt, system=SYSTEM, max_tokens=4000)
+        response = await complete(prompt, system=SYSTEM, max_tokens=RESPONSE_MAX_TOKENS)
         if not response:
             continue
         got_response = True
         if vi.passes(prompt, stored, response):
-            return [{"id": f"if-{item['id']}", "prompt": prompt, "constraints": stored,
-                     "response": response, "teacher": item["teacher"]}]
+            # "task" is the base task before constraints, for later overlap checks.
+            return [{"id": f"if-{item['id']}", "task": item["task"], "prompt": prompt,
+                     "constraints": stored, "response": response, "teacher": item["teacher"]}]
     return [] if got_response else None
 
 
@@ -146,23 +150,28 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
     args = p.parse_args()
+    teachers.check_configured(args.teachers)
 
-    if args.command == "base":
-        items = [
-            {"id": f"bt-{ti}-{fi}", "topic": topic, "form": form,
-             "teacher": args.teachers[(ti + fi) % len(args.teachers)]}
-            for ti, topic in enumerate(TOPICS) for fi, form in enumerate(FORMS)
-        ][: args.limit]
-        asyncio.run(run_many(items, write_base_tasks, BASE, args.concurrency))
-    else:
-        rng = random.Random(SEED)
-        tasks = [t for t in jsonl.read(BASE) if not is_dev(t["id"], DEV_PER_MILLE)]
-        rng.shuffle(tasks)
-        items = [
-            dict(t, teacher=args.teachers[i % len(args.teachers)], seed=rng.getrandbits(32))
-            for i, t in enumerate(tasks[: args.limit])
-        ]
-        asyncio.run(run_many(items, respond, RESPONSES, args.concurrency))
+    out = BASE if args.command == "base" else RESPONSES
+    try:
+        if args.command == "base":
+            items = [
+                {"id": f"bt-{ti}-{fi}", "topic": topic, "form": form,
+                 "teacher": args.teachers[(ti + fi) % len(args.teachers)]}
+                for ti, topic in enumerate(TOPICS) for fi, form in enumerate(FORMS)
+            ][: args.limit]
+            asyncio.run(run_many(items, write_base_tasks, out, args.concurrency))
+        else:
+            rng = random.Random(SEED)
+            tasks = [t for t in jsonl.read(BASE) if not is_dev(t["id"], DEV_PER_MILLE)]
+            rng.shuffle(tasks)
+            items = [
+                dict(t, teacher=args.teachers[i % len(args.teachers)], seed=rng.getrandbits(32))
+                for i, t in enumerate(tasks[: args.limit])
+            ]
+            asyncio.run(run_many(items, respond, out, args.concurrency))
+    finally:
+        teachers.write_usage(out)
 
 
 if __name__ == "__main__":

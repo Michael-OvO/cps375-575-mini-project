@@ -27,8 +27,25 @@ def words(text: str) -> list[str]:
     return _WORD.findall(text)
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?])[\"')\]]*\s+")
+_LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*•]|#+)\s+")
+# Abbreviations that do not end a sentence when the next word is lower-case.
+_ABBREV = re.compile(r"(?:^|[\s(\"'])(?:e\.g|i\.e|dr|mr|mrs|ms|vs|etc)\.$", re.IGNORECASE)
+
+
 def sentences(text: str) -> list[str]:
-    return [s for s in re.split(r"(?<=[.!?])[\"')\]]*\s+", text.strip()) if s]
+    """Sentences split on . ! ? and on newlines; list markers and heading prefixes are removed."""
+    out: list[str] = []
+    for line in text.strip().split("\n"):
+        line = _LIST_MARKER.sub("", line).strip()
+        merged: list[str] = []
+        for frag in _SENTENCE_END.split(line):
+            if merged and _ABBREV.search(merged[-1]) and frag[:1].islower():
+                merged[-1] = f"{merged[-1]} {frag}"
+            else:
+                merged.append(frag)
+        out.extend(s for s in merged if re.search(r"\w", s))
+    return out
 
 
 def paragraphs(text: str) -> list[str]:

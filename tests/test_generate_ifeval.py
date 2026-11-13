@@ -128,3 +128,21 @@ def test_rewrite_falls_back_when_too_long(monkeypatch):
 def test_rewrite_never_for_repeat_prompt(monkeypatch):
     cs = [{"id": "combination:repeat_prompt", "kwargs": {"prompt_to_repeat": _PROMPT}}]
     assert _rewrite(monkeypatch, _PROMPT, cs, "A completely different rewording of the request here.") == _PROMPT
+
+
+def test_respond_uses_16000_tokens_and_stores_base_task(monkeypatch):
+    _stub_constraints(monkeypatch)
+    monkeypatch.setattr(gi, "REWRITE_SHARE", 1.0)
+    seen = []
+
+    async def fake(prompt, **kw):
+        seen.append(kw["max_tokens"])
+        if "Rewrite the request" in prompt:
+            return None  # rewrite falls back to the original prompt
+        return "just three words"
+
+    monkeypatch.setattr(gi.teachers, "get", lambda name: fake)
+    rows = asyncio.run(gi.respond({"id": "bt-0-9", "task": "  Describe tea.", "teacher": "claude", "seed": 5}))
+    assert seen == [16000, 16000]
+    assert rows[0]["task"] == "  Describe tea."
+    assert rows[0]["prompt"].startswith("Describe tea.")

@@ -36,3 +36,14 @@ def test_sampler_modes():
     for _ in range(100):
         cons = sample.sample_constraints(rng, "Write about tea.", mode="dev_unseen")
         assert any(c["id"] in extra.REGISTRY and extra.REGISTRY[c["id"]].dev_only for c in cons)
+
+
+def test_wrap_never_combined_with_start_or_end():
+    rng = random.Random(11)
+    for mode in ("train", "dev_seen", "dev_unseen"):
+        for _ in range(3000):
+            cons = sample.sample_constraints(rng, "Write about tea.", mode=mode)
+            groups = {sample.group_of(c["id"]) for c in cons}
+            assert not ("wrap" in groups and groups & {"start", "end"}), (mode, [c["id"] for c in cons])
+            if mode == "dev_unseen":
+                assert any(c["id"] in extra.REGISTRY and extra.REGISTRY[c["id"]].dev_only for c in cons)

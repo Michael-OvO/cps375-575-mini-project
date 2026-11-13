@@ -8,6 +8,7 @@ Usage:
 import argparse
 import asyncio
 import logging
+import re
 
 from pipeline import jsonl, teachers
 from pipeline.config import DATA
@@ -31,16 +32,37 @@ CATEGORIES = [
     "text tokenizing and word statistics", "heap and priority selection",
 ]
 
+# Every write call gets its own (data shape, real-world framing) pair plus a call index, so no two
+# calls in a category send the same prompt. 6 x 9 = 54 distinct pairs per category.
+SHAPES = [
+    "inputs that are short lists or strings, with emphasis on empty and single-element cases",
+    "inputs with repeated values, ties or duplicates that the function must handle",
+    "inputs mixing negative numbers, zero and positive numbers",
+    "nested or paired data such as lists of tuples, dicts of lists or rows of a table",
+    "typical input sizes of a few dozen items, where an off-by-one error would show",
+    "boundary conditions: first and last positions, minimum and maximum values",
+]
+FRAMINGS = [
+    "a store inventory", "student grades", "server log lines", "text processing",
+    "scheduling and calendars", "geometry and measurements", "personal finance",
+    "sports scores and rankings", "sensor readings",
+]
+
 WRITE_PROMPT = """Write 5 short Python programming tasks in the category: {category}.
 
 Each task is a one-sentence description beginning "Write a function to" or "Write a python function \
 to", a correct reference solution, and exactly 3 assert statements that call the function.
+
+Sub-focus for this batch (batch {call} for this category): {shape}. Where it fits naturally, frame \
+the tasks around {framing}.
 
 Requirements:
 - Difficulty: entry-level to intermediate; solvable in under 20 lines.
 - Standard library only. No input(), no printing, no files, no randomness, no network.
 - The description must be short and natural, like a textbook exercise. It does not name the \
 function or its parameters: those are fixed by the tests.
+- Avoid the most common textbook exercises for this category (the first few anyone would think \
+of); write less obvious tasks instead.
 - The asserts must be deterministic and compare with ==.
 - Make the 5 tasks clearly different from each other.
 
@@ -63,6 +85,22 @@ behaviour the description leaves open. Each assert must compare with ==.
 Return only a JSON array of 5 strings."""
 
 
+MAX_HIDDEN = 8
+_NAME = re.compile(r"def\s+(\w+)")
+
+
+def function_name(code: str) -> str | None:
+    sig = vc.signature_of(code)
+    match = _NAME.match(sig) if sig else None
+    return match.group(1) if match else None
+
+
+def calls(test, name: str | None) -> bool:
+    """An assert counts only if it calls the solution's function."""
+    return (bool(name) and isinstance(test, str) and test.startswith("assert ")
+            and re.search(rf"\b{re.escape(name)}\s*\(", test) is not None)
+
+
 def _valid(task) -> bool:
     return (
         isinstance(task, dict)
@@ -74,11 +112,26 @@ def _valid(task) -> bool:
     )
 
 
+def write_prompt(item: dict) -> str:
+    return WRITE_PROMPT.format(category=item["category"], call=item["call"] + 1,
+                               shape=item["shape"], framing=item["framing"])
+
+
+def write_items(teacher_names: list[str], calls_per_category: int) -> list[dict]:
+    """One item per (category, call), interleaved across categories so a --limit pilot covers many."""
+    return [
+        {"id": f"ct-{ci}-{k}", "category": cat, "author": teacher_names[(ci + k) % len(teacher_names)],
+         "call": k, "shape": SHAPES[k % len(SHAPES)],
+         "framing": FRAMINGS[(k // len(SHAPES) + ci) % len(FRAMINGS)]}
+        for k in range(calls_per_category) for ci, cat in enumerate(CATEGORIES)
+    ]
+
+
 async def write_tasks(item: dict) -> list[dict] | None:
-    reply = await teachers.get(item["author"])(WRITE_PROMPT.format(category=item["category"]))
+    reply = await teachers.get(item["author"])(write_prompt(item))
     if reply is None:  # refusal, truncation or empty: retry on rerun
         return None
-    tasks = teachers.parse_json(reply)
+    tasks = teachers.parse_json(reply, latex=False)  # strings hold code: \n is a newline
     if not isinstance(tasks, list):
         return []
     rows = []
@@ -86,7 +139,10 @@ async def write_tasks(item: dict) -> list[dict] | None:
         if not _valid(task):
             continue
         code = vc.extract_code(task["code"]).strip()
-        if vc.signature_of(code) and await asyncio.to_thread(vc.run_tests, code, task["tests"]):
+        name = function_name(code)
+        if not (name and all(calls(t, name) for t in task["tests"])):
+            continue  # an assert that never calls the function tests nothing
+        if await asyncio.to_thread(vc.run_tests, code, task["tests"]):
             rows.append({"id": f"{item['id']}-{j}", "text": task["text"].strip(), "code": code,
                          "tests": task["tests"], "category": item["category"], "author": item["author"]})
     return rows
@@ -100,10 +156,11 @@ async def add_hidden(task: dict, teacher_names: list[str]) -> list[dict] | None:
     reply = await teachers.get(others[0])(prompt)
     if reply is None:  # refusal, truncation or empty: retry on rerun
         return None
-    hidden = teachers.parse_json(reply)
+    hidden = teachers.parse_json(reply, latex=False)
     if not isinstance(hidden, list):
         return []
-    hidden = [h for h in hidden if isinstance(h, str) and h.startswith("assert ")]
+    name = function_name(task["code"])
+    hidden = list(dict.fromkeys(h.strip() for h in hidden if calls(h, name)))[:MAX_HIDDEN]
     if len(hidden) < 3:
         return []
     if not await asyncio.to_thread(vc.run_tests, task["code"], hidden):
@@ -120,17 +177,19 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
     args = p.parse_args()
+    teachers.check_configured(args.teachers)
 
-    if args.command == "write":
-        items = [
-            {"id": f"ct-{ci}-{k}", "category": cat, "author": args.teachers[(ci + k) % len(args.teachers)]}
-            for ci, cat in enumerate(CATEGORIES) for k in range(args.calls_per_category)
-        ][: args.limit]
-        asyncio.run(run_many(items, write_tasks, RAW, args.concurrency))
-    else:
-        items = jsonl.read(RAW)[: args.limit]
-        fn = lambda t: add_hidden(t, args.teachers)  # noqa: E731
-        asyncio.run(run_many(items, fn, TASKS, args.concurrency))
+    out = RAW if args.command == "write" else TASKS
+    try:
+        if args.command == "write":
+            items = write_items(args.teachers, args.calls_per_category)[: args.limit]
+            asyncio.run(run_many(items, write_tasks, out, args.concurrency))
+        else:
+            items = jsonl.read(RAW)[: args.limit]
+            fn = lambda t: add_hidden(t, args.teachers)  # noqa: E731
+            asyncio.run(run_many(items, fn, out, args.concurrency))
+    finally:
+        teachers.write_usage(out)
 
 
 if __name__ == "__main__":

@@ -3,8 +3,10 @@
 import anthropic
 
 from pipeline.config import CLAUDE_MODEL
+from pipeline.teachers import new_usage, record_usage
 
 _client: anthropic.AsyncAnthropic | None = None
+USAGE = new_usage()  # calls, tokens and served model ids, for this process
 
 
 def _get_client() -> anthropic.AsyncAnthropic:
@@ -28,6 +30,7 @@ async def complete(
     if system:
         kwargs["system"] = system
     response = await _get_client().beta.messages.create(**kwargs)
+    record_usage(USAGE, response)
     if response.stop_reason in ("refusal", "max_tokens"):
         return None
     text = "".join(block.text for block in response.content if block.type == "text").strip()

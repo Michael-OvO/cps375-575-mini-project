@@ -52,7 +52,8 @@ Write 5 new, original problems in the same subject, style and difficulty. Requir
 - Each problem must be self-contained and solvable without a calculator.
 - Use LaTeX for mathematics.
 
-Return only a JSON array of 5 strings, one problem per string, with no solutions."""
+Return only a JSON array of 5 strings, one problem per string, with no solutions. Inside the JSON \
+strings, double every backslash, as JSON requires: write \\\\frac{{1}}{{2}} and \\\\sqrt{{2}}, never \\frac{{1}}{{2}}."""
 
 
 def load_train() -> list[dict]:
@@ -74,8 +75,29 @@ def load_train() -> list[dict]:
     return out
 
 
+def clean_answer(answer: str) -> str:
+    """Strip whitespace, surrounding $...$ / $$...$$ / \\(...\\), surrounding ** and a trailing period."""
+    prev = None
+    while answer != prev:
+        prev = answer
+        answer = answer.strip()
+        if answer.startswith("**"):
+            answer = answer[2:]
+        if answer.endswith("**"):
+            answer = answer[:-2]
+        if answer.endswith("."):
+            answer = answer[:-1]
+        if answer.startswith("$$") and answer.endswith("$$") and answer.count("$") == 4:
+            answer = answer[2:-2]
+        elif len(answer) >= 2 and answer.startswith("$") and answer.endswith("$") and answer.count("$") == 2:
+            answer = answer[1:-1]
+        if answer.startswith("\\(") and answer.endswith("\\)"):
+            answer = answer[2:-2]
+    return answer
+
+
 def split_solution(text: str) -> tuple[str, str] | None:
-    answer = vm.answer_of(text or "")
+    answer = clean_answer(vm.answer_of(text or ""))
     body = vm.body_of(text or "")
     if not answer or len(body.split()) < 3:
         return None
@@ -111,15 +133,39 @@ async def solve_known(item: dict, teacher_names: list[str], source: str) -> list
     return rows if any_response else None
 
 
+def solve_known_items(train: list[dict], teacher_names: list[str]) -> list[dict]:
+    """One runner item per (problem, teacher), so one teacher failing never discards another's result."""
+    return [dict(it, id=f"{it['id']}-{name}", pid=it["id"], teacher=name)
+            for it in train for name in teacher_names]
+
+
+async def solve_known_one(item: dict, source: str) -> list[dict] | None:
+    """Solve one (problem, teacher) item; keep the solution if it matches the known answer.
+
+    Returns None (retry) when the teacher gave no response.
+    """
+    responded, solved = await _solve(item["problem"], item["teacher"])
+    if not responded:
+        return None
+    problem = dict(item, id=item["pid"])
+    if solved and await vm.equivalent(solved[1], item["target"]):
+        return [_row(problem, item["teacher"], solved[0], item["target"], source)]
+    return []
+
+
 async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict] | None:
     """Solve a new problem. Two teachers agree -> accept. Otherwise a third, high-effort solve decides.
 
-    Returns None (retry) only when every solve call produced no response.
+    The two first solves run concurrently. Returns None (retry) when either of them raised, or when
+    every solve call produced no response.
     """
     first, second = teacher_names[0], teacher_names[-1]
     second_label = f"{second}-2" if second == first else second
-    ra, a = await _solve(item["problem"], first)
-    rb, b = await _solve(item["problem"], second)
+    results = await asyncio.gather(_solve(item["problem"], first), _solve(item["problem"], second),
+                                   return_exceptions=True)
+    if any(isinstance(r, BaseException) for r in results):
+        return None  # retry on rerun; never pay for a tie-break without both first solves
+    (ra, a), (rb, b) = results
     any_response = ra or rb
     solved = [(first, a), (second_label, b)]
     if a and b and await vm.equivalent(a[1], b[1]):
@@ -154,7 +200,8 @@ async def write_problems(item: dict) -> list[dict] | None:
     return [
         {"id": f"{item['id']}-{j}", "problem": p.strip(), "level": item["level"],
          "subject": item["subject"], "author": item["author"]}
-        for j, p in enumerate(problems) if isinstance(p, str) and len(p.strip()) > 20
+        for j, p in enumerate(problems)
+        if isinstance(p, str) and len(p.strip()) > 20 and not teachers.has_control_chars(p)
     ]
 
 
@@ -184,6 +231,8 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
     args = p.parse_args()
+    if args.command != "dev":
+        teachers.check_configured(args.teachers)
 
     if args.command == "dev":
         dev = [
@@ -195,17 +244,21 @@ def main() -> None:
         return
 
     train = [r for r in load_train() if not r["dev"]]
-    if args.command == "solve-train":
-        items = train[: args.limit]
-        fn = lambda it: solve_known(it, args.teachers, "math_train")  # noqa: E731
-        asyncio.run(run_many(items, fn, TRAIN_SOLUTIONS, args.concurrency))
-    elif args.command == "new-problems":
-        items = _write_calls(train, args.teachers, args.calls)[: args.limit]
-        asyncio.run(run_many(items, write_problems, NEW_PROBLEMS, args.concurrency))
-    else:
-        items = jsonl.read(NEW_PROBLEMS)[: args.limit]
-        fn = lambda it: solve_unknown(it, args.teachers)  # noqa: E731
-        asyncio.run(run_many(items, fn, NEW_SOLUTIONS, args.concurrency))
+    out = {"solve-train": TRAIN_SOLUTIONS, "new-problems": NEW_PROBLEMS, "solve-new": NEW_SOLUTIONS}[args.command]
+    try:
+        if args.command == "solve-train":
+            items = solve_known_items(train[: args.limit], args.teachers)
+            fn = lambda it: solve_known_one(it, "math_train")  # noqa: E731
+            asyncio.run(run_many(items, fn, out, args.concurrency))
+        elif args.command == "new-problems":
+            items = _write_calls(train, args.teachers, args.calls)[: args.limit]
+            asyncio.run(run_many(items, write_problems, out, args.concurrency))
+        else:
+            items = jsonl.read(NEW_PROBLEMS)[: args.limit]
+            fn = lambda it: solve_unknown(it, args.teachers)  # noqa: E731
+            asyncio.run(run_many(items, fn, out, args.concurrency))
+    finally:
+        teachers.write_usage(out)
 
 
 if __name__ == "__main__":

@@ -46,3 +46,41 @@ def test_sentence_split_after_closing_quote():
     r = extra.REGISTRY
     assert r["x:exact_sentences"].check('He said "Go." Then she left.', {"n": 2})
     assert r["x:open_question"].check('"Why?" she asked. Fine.', {})
+
+
+def test_sentences_split_on_newlines_and_strip_list_markers():
+    text = "Here are the steps:\n1. Boil the water\n2) Add the leaves\n- Wait three minutes\n* Pour\n• Enjoy"
+    assert extra.sentences(text) == ["Here are the steps:", "Boil the water", "Add the leaves",
+                                     "Wait three minutes", "Pour", "Enjoy"]
+    assert extra.sentences("# Tea Guide\n\n## Brewing\nSteep it. Drink it.") == [
+        "Tea Guide", "Brewing", "Steep it.", "Drink it."]
+
+
+def test_sentences_drop_fragments_without_word_characters():
+    assert extra.sentences("Fine.\n---\n...\n* \nDone!") == ["Fine.", "Done!"]
+
+
+def test_sentences_keep_abbreviations_before_lowercase():
+    text = "Bring tools, e.g. a hammer. Use one, i.e. the big one. Ask Dr. smith. Cats vs. dogs is old."
+    assert extra.sentences(text) == ["Bring tools, e.g. a hammer.", "Use one, i.e. the big one.",
+                                     "Ask Dr. smith.", "Cats vs. dogs is old."]
+    assert extra.sentences("Pack pens, paper, etc. and go. We left, etc. Then we ate.") == [
+        "Pack pens, paper, etc. and go.", "We left, etc.", "Then we ate."]
+    assert extra.sentences("Mr. and Mrs. jones came. Ms. lee too.") == [
+        "Mr. and Mrs. jones came.", "Ms. lee too."]
+
+
+def test_sentence_based_types_with_lists_and_abbreviations():
+    r = extra.REGISTRY
+    numbered = "1. Tea is calming\n2. Coffee is strong\n3. Water is best"
+    assert r["x:exact_sentences"].check(numbered, {"n": 3})
+    assert r["x:exact_sentences"].check("Use herbs, e.g. mint. It helps.", {"n": 2})
+    # The list number is not a word: each item has exactly three words.
+    assert r["x:max_sentence_words"].check(numbered, {"n": 3})
+    assert r["x:min_sentence_words"].check(numbered, {"n": 3})
+    assert not r["x:min_sentence_words"].check(numbered + "\n4. Yes", {"n": 3})
+    assert r["x:keyword_first_sentence"].check("- The river runs\n- A bridge stands", {"word": "river"})
+    assert not r["x:keyword_first_sentence"].check("- The river runs\n- A bridge stands", {"word": "bridge"})
+    assert r["x:keyword_last_sentence"].check("- The river runs\n- A bridge stands", {"word": "bridge"})
+    assert r["x:open_question"].check("# Why tea?\nBecause it is warm.", {})
+    assert not r["x:open_question"].check("# Tea\nWhy tea? Because.", {})
