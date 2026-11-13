@@ -35,6 +35,9 @@ async def equivalent(answer: str, target: str) -> bool:
     try:
         if await is_equiv(answer, target):
             return True
+    except Exception:
+        pass
+    try:
         return bool(
             await is_equiv_sympy(
                 await normalize_final_answer(answer), await normalize_final_answer(target)

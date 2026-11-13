@@ -18,3 +18,35 @@ def test_equivalence():
 def test_boxed_target():
     assert vm.boxed_target("So the result is $\\boxed{7}$.") == "7"
     assert vm.boxed_target("no box here") is None
+
+
+DRIFT_PAIRS = [
+    ("7", "7"),
+    ("\\frac{1}{2}", "\\frac12"),
+    ("3", "4"),
+    ("(1, 2)", "(1,2)"),
+    ("[0, 1)", "[0,1)"),
+    ("\\pi", "3.14"),
+    ("0.5", "\\frac{1}{2}"),
+    ("\\sqrt{2}", "\\sqrt{3}"),
+]
+
+
+def _scorer_verdict(answer, target):
+    import asyncio
+    from types import SimpleNamespace
+
+    from inspect_ai.scorer import CORRECT, Target
+    from evaluation.math_scorer import math_answer_match
+
+    state = SimpleNamespace(output=SimpleNamespace(completion=f"work\nANSWER: {answer}"))
+    score = asyncio.run(math_answer_match()(state, Target(target)))
+    return score.value == CORRECT
+
+
+def test_drift_guard_matches_eval_scorer():
+    import asyncio
+
+    for answer, target in DRIFT_PAIRS:
+        ours = asyncio.run(vm.equivalent(answer, target))
+        assert ours == _scorer_verdict(answer, target), (answer, target)
