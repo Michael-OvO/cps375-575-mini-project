@@ -82,9 +82,10 @@ def split_solution(text: str) -> tuple[str, str] | None:
     return body, answer
 
 
-async def _solve(problem: str, teacher: str, effort: str = "medium") -> tuple[str, str] | None:
+async def _solve(problem: str, teacher: str, effort: str = "medium") -> tuple[bool, tuple[str, str] | None]:
+    """Return (responded, parsed). responded is False when the teacher gave no text at all."""
     text = await teachers.get(teacher)(SOLVE_PROMPT.format(problem=problem), effort=effort)
-    return split_solution(text)
+    return bool(text), split_solution(text)
 
 
 def _row(item: dict, teacher: str, body: str, target: str, source: str) -> dict:
@@ -95,26 +96,37 @@ def _row(item: dict, teacher: str, body: str, target: str, source: str) -> dict:
     }
 
 
-async def solve_known(item: dict, teacher_names: list[str], source: str) -> list[dict]:
-    """Solve a problem with a known answer; keep each teacher solution that matches it."""
+async def solve_known(item: dict, teacher_names: list[str], source: str) -> list[dict] | None:
+    """Solve a problem with a known answer; keep each teacher solution that matches it.
+
+    Returns None (retry) only when no teacher responded at all.
+    """
     rows = []
+    any_response = False
     for name in teacher_names:
-        solved = await _solve(item["problem"], name)
+        responded, solved = await _solve(item["problem"], name)
+        any_response = any_response or responded
         if solved and await vm.equivalent(solved[1], item["target"]):
             rows.append(_row(item, name, solved[0], item["target"], source))
-    return rows
+    return rows if any_response else None
 
 
-async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict]:
-    """Solve a new problem. Two teachers agree -> accept. Otherwise a third, high-effort solve decides."""
+async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict] | None:
+    """Solve a new problem. Two teachers agree -> accept. Otherwise a third, high-effort solve decides.
+
+    Returns None (retry) only when every solve call produced no response.
+    """
     first, second = teacher_names[0], teacher_names[-1]
-    a = await _solve(item["problem"], first)
-    b = await _solve(item["problem"], second)
-    solved = [(first, a), (second, b)]
+    second_label = f"{second}-2" if second == first else second
+    ra, a = await _solve(item["problem"], first)
+    rb, b = await _solve(item["problem"], second)
+    any_response = ra or rb
+    solved = [(first, a), (second_label, b)]
     if a and b and await vm.equivalent(a[1], b[1]):
         target = a[1]
     else:
-        c = await _solve(item["problem"], first, effort="high")
+        rc, c = await _solve(item["problem"], first, effort="high")
+        any_response = any_response or rc
         solved.append((f"{first}-tiebreak", c))
         target = None
         for cand in (a, b):
@@ -122,7 +134,7 @@ async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict]:
                 target = c[1]
                 break
         if target is None:
-            return []
+            return [] if any_response else None
     rows = []
     for name, sol in solved:
         if sol and await vm.equivalent(sol[1], target):
@@ -130,10 +142,13 @@ async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict]:
     return rows
 
 
-async def write_problems(item: dict) -> list[dict]:
+async def write_problems(item: dict) -> list[dict] | None:
     seeds = "\n\n".join(f"Example {i + 1}: {p}" for i, p in enumerate(item["seeds"]))
     prompt = WRITE_PROMPT.format(subject=item["subject"], level=item["level"], seeds=seeds)
-    problems = teachers.parse_json(await teachers.get(item["author"])(prompt) or "")
+    reply = await teachers.get(item["author"])(prompt)
+    if not reply:
+        return None  # no response: retry on rerun
+    problems = teachers.parse_json(reply)
     if not isinstance(problems, list):
         return []
     return [
