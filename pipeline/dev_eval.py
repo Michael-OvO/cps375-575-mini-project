@@ -69,8 +69,14 @@ async def score_items(sampler, math: list[dict], code: list[dict], ifd: list[dic
 
 
 def _load(name: str, split: str, limit: int | None) -> list[dict]:
-    rows = [r for r in jsonl.read(DATA / name) if r["vault"] == (split == "vault")]
-    return rows[:limit]
+    """Items of one dev file for the split. A missing file or zero items is an error, never a 0.0 score."""
+    path = DATA / name
+    if not path.exists():
+        raise FileNotFoundError(f"dev file missing: {path}. Build the dev sets first.")
+    rows = [r for r in jsonl.read(path) if r["vault"] == (split == "vault")][:limit]
+    if not rows:
+        raise ValueError(f"{path} has no items for split {split!r} (limit={limit}).")
+    return rows
 
 
 async def evaluate(sampler, split: str = "dev", limit: int | None = None) -> dict:

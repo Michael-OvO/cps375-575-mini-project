@@ -41,6 +41,17 @@ def parse_args(argv=None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def load_train_rows(run_dir) -> list[dict]:
+    """Rows of runs/<name>/train.jsonl; a missing or empty file is an error, raised before any client exists."""
+    path = run_dir / "train.jsonl"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} does not exist. Build it first with pipeline.select --name {run_dir.name}.")
+    rows = jsonl.read(path)
+    if not rows:
+        raise ValueError(f"{path} has no training examples. Rebuild it with pipeline.select.")
+    return rows
+
+
 def build_renderer():
     tokenizer = get_tokenizer(STUDENT)
     return renderers.get_renderer(model_info.get_recommended_renderer_name(STUDENT), tokenizer)
@@ -101,7 +112,7 @@ def main() -> None:
     args = parse_args()
 
     run_dir = RUNS / args.name
-    rows = jsonl.read(run_dir / "train.jsonl")
+    rows = load_train_rows(run_dir)
     base_lr = args.lr if args.lr is not None else hyperparam_utils.get_lr(STUDENT)
     renderer = build_renderer()
 

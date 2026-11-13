@@ -37,3 +37,18 @@ def test_paraphrases_appear_with_rng():
     assert all("P" in p and "ANSWER" in p for p in prompts)
     code = {formats.code_prompt("T", ["assert f() == 1"], rng)[:40] for _ in range(60)}
     assert len(code) > 1
+
+
+def test_every_fewshot_passes_its_own_tests():
+    from pipeline.verify import code as vc
+    assert len(formats.OWN_FEWSHOT) == 6
+    for shot in formats.OWN_FEWSHOT:
+        assert set(shot) == {"text", "tests", "code"} and len(shot["tests"]) == 3
+        assert vc.run_tests(shot["code"], shot["tests"]), shot["text"]
+        assert not vc.run_tests(shot["code"], shot["tests"] + ["assert False"])  # tests really execute
+
+
+def test_fewshots_avoid_textbook_exercises():
+    texts = " ".join(s["text"] for s in formats.OWN_FEWSHOT).lower()
+    for old in ("vowel", "perfect square", "reverse the order of words"):
+        assert old not in texts

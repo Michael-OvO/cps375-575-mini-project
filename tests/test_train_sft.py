@@ -181,3 +181,20 @@ def test_no_publish_writes_false_and_skips_publish(tmp_path):
 
     out = train_sft.save_and_publish(_FakeClient(), boom, tmp_path, "r1", _INFO, True)
     assert out["published"] is False and _read(tmp_path)["published"] is False
+
+
+def test_missing_or_empty_train_file_raises_before_any_client(tmp_path, monkeypatch):
+    def no_client(*a, **k):
+        raise AssertionError("no client may be created")
+
+    monkeypatch.setattr(train_sft.tinker, "ServiceClient", no_client)
+    monkeypatch.setattr(train_sft, "RUNS", tmp_path)
+    monkeypatch.setattr(train_sft, "build_renderer", lambda: "R")
+    monkeypatch.setattr(train_sft, "parse_args", lambda argv=None: train_sft.argparse.Namespace(
+        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True))
+    (tmp_path / "r1").mkdir()
+    with pytest.raises(FileNotFoundError, match="pipeline.select"):
+        train_sft.main()
+    (tmp_path / "r1" / "train.jsonl").write_text("\n")
+    with pytest.raises(ValueError, match="no training examples"):
+        train_sft.main()

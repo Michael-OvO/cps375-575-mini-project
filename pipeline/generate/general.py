@@ -21,9 +21,9 @@ MAX_SOURCE_SHARE = 0.4
 SCAN = 1_000_000  # covers the whole train split (about 939k rows); shards are source-ordered
 # Skip Tulu subsets that target the three graded skills (those come from our own verified data)
 # and the least chat-like ones (flan, cot, table_gpt, sciriff; wildjailbreak and wildguard would otherwise
-# make refusal data over half the slice).
+# make refusal data over half the slice; coconot is mostly refusals too).
 SKIP = ("math", "code", "persona", "ifdata", "numina", "gsm", "flan", "cot",
-        "table_gpt", "sciriff", "wildjailbreak", "wildguard")
+        "table_gpt", "sciriff", "wildjailbreak", "wildguard", "coconot")
 MIN_ASCII = 0.9
 
 

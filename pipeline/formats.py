@@ -21,10 +21,12 @@ MATH_PARAPHRASES = [
 # Few-shot examples written for this project. Never replace these with MBPP items.
 OWN_FEWSHOT = [
     {
-        "text": "Write a function to count the vowels in a string.",
-        "tests": ['assert count_vowels("banana") == 3', 'assert count_vowels("sky") == 0',
-                  'assert count_vowels("AEIOU") == 5'],
-        "code": "def count_vowels(s):\n    return sum(1 for ch in s.lower() if ch in 'aeiou')",
+        "text": "Write a function to return the total length of the strings in a list that start with a given prefix.",
+        "tests": ['assert prefix_length_total(["apple", "apricot", "banana"], "ap") == 12',
+                  'assert prefix_length_total(["cat", "dog"], "z") == 0',
+                  'assert prefix_length_total(["", "pre", "prefix"], "pre") == 9'],
+        "code": "def prefix_length_total(words, prefix):\n"
+                "    return sum(len(w) for w in words if w.startswith(prefix))",
     },
     {
         "text": "Write a function to return the second largest distinct value in a list.",
@@ -33,11 +35,12 @@ OWN_FEWSHOT = [
         "code": "def second_largest(nums):\n    values = sorted(set(nums), reverse=True)\n    return values[1]",
     },
     {
-        "text": "Write a python function to check whether a number is a perfect square.",
-        "tests": ["assert is_perfect_square(49) == True", "assert is_perfect_square(50) == False",
-                  "assert is_perfect_square(0) == True"],
-        "code": "import math\n\ndef is_perfect_square(n):\n    if n < 0:\n        return False\n"
-                "    root = math.isqrt(n)\n    return root * root == n",
+        "text": "Write a python function to check whether the digits of a non-negative integer are strictly "
+                "increasing from left to right.",
+        "tests": ["assert digits_increasing(1359) == True", "assert digits_increasing(1224) == False",
+                  "assert digits_increasing(7) == True"],
+        "code": "def digits_increasing(n):\n    digits = str(n)\n"
+                "    return all(a < b for a, b in zip(digits, digits[1:]))",
     },
     {
         "text": "Write a function to merge two dictionaries, adding values for shared keys.",
@@ -48,11 +51,11 @@ OWN_FEWSHOT = [
                 "        result[key] = result.get(key, 0) + value\n    return result",
     },
     {
-        "text": "Write a function to reverse the order of words in a sentence.",
-        "tests": ['assert reverse_words("one two three") == "three two one"',
-                  'assert reverse_words("hello") == "hello"',
-                  'assert reverse_words("a b") == "b a"'],
-        "code": "def reverse_words(sentence):\n    return ' '.join(reversed(sentence.split()))",
+        "text": "Write a function to return the positions at which two lists of equal length hold different values.",
+        "tests": ["assert diff_positions([1, 2, 3], [1, 5, 3]) == [1]",
+                  'assert diff_positions(["a", "b"], ["a", "b"]) == []',
+                  "assert diff_positions([0, 0, 0, 0], [1, 0, 2, 0]) == [0, 2]"],
+        "code": "def diff_positions(a, b):\n    return [i for i, (x, y) in enumerate(zip(a, b)) if x != y]",
     },
     {
         "text": "Write a function to find the tuples whose elements sum to a given value.",
