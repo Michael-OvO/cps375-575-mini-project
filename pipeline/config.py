@@ -9,7 +9,9 @@ DATA = ROOT / "data"
 RUNS = ROOT / "runs"
 
 STUDENT = "Qwen/Qwen3.5-9B-Base"
-CLAUDE_MODEL = "claude-fable-5-2"
+# Fable 5.2 wrote the first part of the pool (until its usage limit on 2026-11-14);
+# Opus 5.5 is the default from then on. The served model is recorded per call in usage.json.
+CLAUDE_MODEL = os.environ.get("CLAUDE_TEACHER_MODEL", "claude-opus-5-5")
 GPT_MODEL = os.environ.get("OPENAI_TEACHER_MODEL", "")
 TINKER_TEACHER = "Qwen/Qwen3.5-397B-A17B"
 
