@@ -5,6 +5,9 @@ import json
 import os
 import re
 import tempfile
+import time
+import uuid
+from datetime import datetime, timezone
 
 from pipeline.config import CLAUDE_MODEL
 from pipeline.teachers import TeacherError, TeacherUnavailable, new_usage
@@ -51,7 +54,70 @@ async def _run_cli(argv: list[str], prompt: str, timeout: float) -> tuple[int, s
     return proc.returncode, out.decode("utf-8", "replace"), err.decode("utf-8", "replace")
 
 
+# Every call is run with --no-session-persistence, so Claude Code writes no session log and usage
+# trackers that read ~/.claude/projects (e.g. TokenMonitor) cannot see it. We append one
+# Claude-Code-shaped "assistant" line per model per call to our own JSONL there instead.
+# Set CLAUDE_TEACHER_LEDGER=0 to turn this off; CLAUDE_TEACHER_LEDGER_DIR moves it (tests use this).
+# One file per process (start time + pid), so concurrent pipeline runs never share a file.
+_LEDGER_FILE = f"teacher-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.jsonl"
+_LEDGER_SESSION = str(uuid.uuid4())
+
+
+def ledger_path() -> str:
+    root = os.environ.get("CLAUDE_TEACHER_LEDGER_DIR") or os.path.join(
+        os.path.expanduser("~"), ".claude", "projects", "-pipeline-teacher-claude")
+    return os.path.join(root, _LEDGER_FILE)
+
+
+def _ledger(data: dict) -> None:
+    if os.environ.get("CLAUDE_TEACHER_LEDGER", "1") == "0":
+        return
+    model_usage = data.get("modelUsage") or {}
+    if not isinstance(model_usage, dict):
+        return
+    ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    call_id = str(data.get("uuid") or uuid.uuid4())
+    lines = []
+    for model, mu in model_usage.items():
+        if not isinstance(mu, dict):
+            continue
+        lines.append(json.dumps({
+            "type": "assistant",
+            "timestamp": ts,
+            "sessionId": _LEDGER_SESSION,
+            "requestId": f"{call_id}:{model}",
+            "isSidechain": False,
+            "message": {
+                "id": f"msg_teacher_{call_id}_{model}",
+                "model": model,
+                "usage": {
+                    "input_tokens": int(mu.get("inputTokens") or 0),
+                    "output_tokens": int(mu.get("outputTokens") or 0),
+                    "cache_read_input_tokens": int(mu.get("cacheReadInputTokens") or 0),
+                    "cache_creation_input_tokens": int(mu.get("cacheCreationInputTokens") or 0),
+                    "cache_creation": {
+                        "ephemeral_5m_input_tokens":
+                            int(mu.get("cacheCreationEphemeral5mInputTokens") or 0),
+                        "ephemeral_1h_input_tokens":
+                            int(mu.get("cacheCreationEphemeral1hInputTokens") or 0),
+                    },
+                },
+            },
+        }))
+    if not lines:
+        return
+    path = ledger_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # One write() per call on an O_APPEND file: a call's lines land together, never interleaved.
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    except OSError:
+        pass  # bookkeeping only; never fail a generation call over it
+
+
 def _record(data: dict, failed: bool = False) -> None:
+    _ledger(data)
     usage = data.get("usage") or {}
     USAGE["calls"] += 1
     USAGE["failed_calls"] += int(failed)

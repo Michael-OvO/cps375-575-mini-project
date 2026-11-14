@@ -200,3 +200,78 @@ def test_failed_calls_merge_on_write(monkeypatch, tmp_path):
     teachers.write_usage(out)
     total = teachers.write_usage(out)
     assert total["claude"]["failed_calls"] == 2 and total["claude"]["cost_usd"] == 1.0
+
+
+# --- usage ledger (Claude-Code-shaped JSONL so TokenMonitor can price --no-session-persistence calls)
+
+def ledger_lines():
+    path = claude_code.ledger_path()
+    try:
+        with open(path, encoding="utf-8") as f:
+            return [json.loads(line) for line in f if line.strip()]
+    except FileNotFoundError:
+        return []
+
+
+FULL_MODEL_USAGE = {"claude-opus-5-5": {
+    "inputTokens": 3, "outputTokens": 40, "cacheReadInputTokens": 1000, "cacheCreationInputTokens": 500,
+    "cacheCreationEphemeral5mInputTokens": 200, "cacheCreationEphemeral1hInputTokens": 300,
+    "costUSD": 0.01}}
+
+
+def test_ledger_writes_claude_code_assistant_line(cli, tmp_path):
+    assert claude_code.ledger_path().startswith(str(tmp_path))  # conftest isolation holds
+    run(cli, FakeProc(good(uuid="u1", modelUsage=FULL_MODEL_USAGE)), "p")
+    [line] = ledger_lines()
+    assert line["type"] == "assistant" and line["isSidechain"] is False
+    assert line["timestamp"].endswith("Z") and "T" in line["timestamp"]
+    assert line["requestId"] == "u1:claude-opus-5-5"
+    assert line["message"]["id"] == "msg_teacher_u1_claude-opus-5-5"
+    assert line["message"]["model"] == "claude-opus-5-5"
+    assert line["message"]["usage"] == {
+        "input_tokens": 3, "output_tokens": 40, "cache_read_input_tokens": 1000,
+        "cache_creation_input_tokens": 500,
+        "cache_creation": {"ephemeral_5m_input_tokens": 200, "ephemeral_1h_input_tokens": 300}}
+
+
+def test_ledger_one_line_per_model_and_unique_ids_across_calls(cli):
+    two = {"claude-opus-5-5": {"inputTokens": 1, "outputTokens": 2},
+           "claude-haiku-5-5": {"inputTokens": 5, "outputTokens": 6}}
+    run(cli, FakeProc(good(uuid="a", modelUsage=two)), "p")
+    run(cli, FakeProc(good(modelUsage=two)), "p")  # no uuid in the result: a random one is used
+    lines = ledger_lines()
+    assert len(lines) == 4
+    assert sorted(l["message"]["model"] for l in lines[:2]) == ["claude-haiku-5-5", "claude-opus-5-5"]
+    keys = {(l["message"]["id"], l["requestId"]) for l in lines}
+    assert len(keys) == 4
+    assert len({l["sessionId"] for l in lines}) == 1
+
+
+def test_ledger_records_failed_results_that_carry_usage(cli):
+    with pytest.raises(teachers.TeacherError):
+        run(cli, FakeProc(good("oops", is_error=True, subtype="error_during_execution")), "p")
+    assert len(ledger_lines()) == 1
+
+
+def test_ledger_skips_calls_without_json_or_model_usage(cli):
+    for proc in (FakeProc("", "boom", code=1), FakeProc("not json")):
+        with pytest.raises(teachers.TeacherError):
+            run(cli, proc, "p")
+    run(cli, FakeProc(good(modelUsage={})), "p")
+    run(cli, FakeProc(good(modelUsage=None)), "p")
+    run(cli, FakeProc(good(modelUsage={"claude-opus-5-5": "garbage"})), "p")
+    assert ledger_lines() == []
+
+
+def test_ledger_can_be_disabled(cli, monkeypatch):
+    monkeypatch.setenv("CLAUDE_TEACHER_LEDGER", "0")
+    run(cli, FakeProc(good()), "p")
+    assert ledger_lines() == []
+
+
+def test_ledger_write_failure_never_fails_the_call(cli, monkeypatch, tmp_path):
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("x")
+    monkeypatch.setenv("CLAUDE_TEACHER_LEDGER_DIR", str(blocker / "sub"))
+    assert run(cli, FakeProc(good("fine")), "p") == "fine"
+    assert teachers.usage_snapshot()["claude"]["calls"] == 1
