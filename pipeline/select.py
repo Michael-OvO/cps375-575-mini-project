@@ -15,7 +15,7 @@ from pipeline.dev import IF_DEV_PER_MILLE, dedupe_code_tasks, is_code_dev
 from pipeline.generate.math import DEV_PER_MILLE as MATH_DEV_PER_MILLE
 from pipeline.teachers import has_control_chars
 
-MIN_SOLUTION_WORDS = 40
+MIN_SOLUTION_CHARS = 30  # non-whitespace characters in the solution body
 LEVEL_WEIGHT = {1: 1.0, 2: 1.0, 3: 1.5, 4: 2.0, 5: 2.5}
 TRAIN_PRICE_PER_M = 1.463
 
@@ -41,10 +41,10 @@ def _read_pool(name: str, dupes: list[dict] | None = None, missing: list[str] | 
 def _shortest_per_problem(rows: list[dict]) -> list[dict]:
     best: dict[str, dict] = {}
     for row in rows:
-        n = len(row["solution"].split())
-        if n < MIN_SOLUTION_WORDS:
+        if len("".join(row["solution"].split())) < MIN_SOLUTION_CHARS:
             continue
-        if row["pid"] not in best or n < len(best[row["pid"]]["solution"].split()):
+        n = len(row["solution"])
+        if row["pid"] not in best or n < len(best[row["pid"]]["solution"]):
             best[row["pid"]] = row
     return list(best.values())
 
@@ -67,7 +67,7 @@ def pick_math(train_rows: list[dict], new_rows: list[dict], n: int, rng: random.
 def math_example(row: dict, rng: random.Random) -> dict:
     prompt = formats.math_prompt(row["problem"], rng)
     return {"id": row["id"], "task": "math",
-            "messages": formats.to_messages(prompt, formats.math_target(row["solution"], row["target"]))}
+            "messages": formats.to_messages(prompt, formats.math_target(row["solution"], row.get("answer") or row["target"]))}
 
 
 def code_example(row: dict, rng: random.Random) -> dict:

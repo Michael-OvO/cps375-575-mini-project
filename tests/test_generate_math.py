@@ -7,6 +7,29 @@ def test_split_solution():
     assert gm.split_solution("Add the two numbers.\nANSWER: 5") == ("Add the two numbers.", "5")
     assert gm.split_solution("no answer line") is None
     assert gm.split_solution("ANSWER: 5") is None  # no working shown
+    assert gm.split_solution("$x=2$ so $2x=4$.\nANSWER: 4") == ("$x=2$ so $2x=4$.", "4")
+    assert gm.split_solution("So $x$.\nANSWER: 4") is None  # trivial body
+
+
+def test_solve_prompt_asks_for_latex_and_keeps_answer_line():
+    assert "inside $...$" in gm.SOLVE_PROMPT and "ASCII" in gm.SOLVE_PROMPT
+    assert "ANSWER: <answer>" in gm.SOLVE_PROMPT
+
+
+def test_rows_carry_teachers_own_answer(monkeypatch):
+    item = {"id": "mt-1", "problem": "?", "target": "\\!\\sqrt{21}", "level": 1, "subject": "Algebra"}
+    monkeypatch.setattr(gm.teachers, "get", _fixed({"claude": ["Root of twenty-one.\nANSWER: $\\sqrt{21}$"]}))
+    rows = asyncio.run(gm.solve_known(item, ["claude"], source="math_train"))
+    assert rows[0]["target"] == "\\!\\sqrt{21}" and rows[0]["answer"] == "\\sqrt{21}"
+    monkeypatch.setattr(gm.teachers, "get", _fixed({"claude": ["Root of twenty-one.\nANSWER: \\sqrt{21}"]}))
+    one = gm.solve_known_items([item], ["claude"])[0]
+    rows = asyncio.run(gm.solve_known_one(one, "math_train"))
+    assert rows[0]["answer"] == "\\sqrt{21}" and rows[0]["target"] == "\\!\\sqrt{21}"
+    monkeypatch.setattr(gm.teachers, "get", _fixed({"claude": ["First we add them.\nANSWER: $\\dfrac12$",
+                                                                 "Adding again carefully.\nANSWER: \\frac12"]}))
+    new = {"id": "mn-0-0", "problem": "?", "level": 3, "subject": "Algebra"}
+    rows = asyncio.run(gm.solve_unknown(new, ["claude"]))
+    assert {r["answer"] for r in rows} == {"\\dfrac12", "\\frac12"} and len(rows) == 2
 
 
 def test_solve_one_keeps_only_correct(monkeypatch):
@@ -286,13 +309,13 @@ def test_solve_unknown_single_teacher_separate_calls_and_tiebreak(monkeypatch):
     assert {r["teacher"] for r in rows} == {"claude-2", "claude-tiebreak"}
     assert len({r["id"] for r in rows}) == 2
     # all three differ -> dropped
-    replies = iter(["a b c d\nANSWER: 1", "a b c d\nANSWER: 2", "a b c d\nANSWER: 3"])
+    replies = iter(["a b c d e f g h i j\nANSWER: 1", "a b c d e f g h i j\nANSWER: 2", "a b c d e f g h i j\nANSWER: 3"])
 
     async def differ(prompt, **kw):
         return next(replies)
     monkeypatch.setattr(gm.teachers, "get", lambda name: differ)
     assert asyncio.run(gm.solve_unknown(item, ["claude"])) == []
     # agreement accepts with labels claude and claude-2, no tie-break call
-    replies = iter(["a b c d\nANSWER: 4", "e f g h\nANSWER: 4"])
+    replies = iter(["a b c d e f g h i j\nANSWER: 4", "e f g h i j k l m n\nANSWER: 4"])
     rows = asyncio.run(gm.solve_unknown(item, ["claude"]))
     assert {r["teacher"] for r in rows} == {"claude", "claude-2"}

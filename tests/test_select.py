@@ -15,17 +15,34 @@ def _sol(pid, words, level=3, source="math_train"):
 
 
 def test_pick_math_one_shortest_per_problem():
-    train = [_sol("mt-1", 80), _sol("mt-1", 50), _sol("mt-1", 10), _sol("mt-2", 60)]
+    train = [_sol("mt-1", 80), _sol("mt-1", 50), _sol("mt-1", 5), _sol("mt-2", 60)]
     new = [_sol(f"mn-{i}", 45, level=1 + i % 5, source="math_new") for i in range(200)]
     picked = select.pick_math(train, new, 50, random.Random(0))
     assert len(picked) == 50
     assert len({r["pid"] for r in picked}) == 50
     mt1 = next(r for r in picked if r["pid"] == "mt-1")
-    assert len(mt1["solution"].split()) == 50  # shortest with at least 40 words
+    assert len(mt1["solution"].split()) == 50  # shortest eligible; the 5-word (20 char) body is too trivial
     assert {"mt-1", "mt-2"} <= {r["pid"] for r in picked}
     hard = sum(1 for r in picked if r["source"] == "math_new" and r["level"] >= 4)
     easy = sum(1 for r in picked if r["source"] == "math_new" and r["level"] <= 2)
     assert hard > easy
+
+
+def test_short_but_real_solution_is_eligible():
+    row = _sol("mt-9", 1)
+    row["solution"] = "Rationalise: $\\frac{3}{\\sqrt{7}}=\\frac{3\\sqrt{7}}{7}$."
+    assert select._shortest_per_problem([row]) == [row]
+    assert select._shortest_per_problem([dict(row, solution="  so   x  ")]) == []
+
+
+def test_math_example_uses_verified_answer_else_target():
+    row = dict(_sol("mt-1", 50), target="\\!\\sqrt{21}", answer="\\sqrt{21}")
+    ex = select.math_example(row, random.Random(0))
+    assert ex["messages"][1]["content"].endswith("ANSWER: \\sqrt{21}")
+    old = dict(_sol("mt-1", 50), target="\\!\\sqrt{21}")
+    assert select.math_example(old, random.Random(0))["messages"][1]["content"].endswith("ANSWER: \\!\\sqrt{21}")
+    empty = dict(old, answer="")
+    assert select.math_example(empty, random.Random(0))["messages"][1]["content"].endswith("ANSWER: \\!\\sqrt{21}")
 
 
 def test_to_example_shapes():

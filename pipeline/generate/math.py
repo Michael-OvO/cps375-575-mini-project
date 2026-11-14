@@ -21,6 +21,7 @@ from pipeline.teachers.runner import run_many
 from pipeline.verify import math as vm
 
 MATH_DATASET = "DigitalLearningGmbH/MATH-lighteval"
+MIN_BODY_CHARS = 10  # non-whitespace characters: rejects only bodies with essentially no working
 DEV_PER_MILLE = 67  # about 500 of 7,500
 
 TRAIN_SOLUTIONS = DATA / "math_train_solutions.jsonl"
@@ -38,6 +39,9 @@ Finish with a final line of the form
 ANSWER: <answer>
 where <answer> is only the final answer in simplest form (LaTeX where needed), with no \\boxed, \
 no units, and no explanation.
+
+Write all mathematics in LaTeX inside $...$, and use only ASCII characters otherwise (no Unicode \
+math symbols such as −, ×, ÷, ≤).
 
 Problem:
 {problem}"""
@@ -100,7 +104,7 @@ def clean_answer(answer: str) -> str:
 def split_solution(text: str) -> tuple[str, str] | None:
     answer = clean_answer(vm.answer_of(text or ""))
     body = vm.body_of(text or "")
-    if not answer or len(body.split()) < 3:
+    if not answer or len("".join(body.split())) < MIN_BODY_CHARS:
         return None
     return body, answer
 
@@ -111,10 +115,10 @@ async def _solve(problem: str, teacher: str, effort: str = "medium") -> tuple[bo
     return bool(text), split_solution(text)
 
 
-def _row(item: dict, teacher: str, body: str, target: str, source: str) -> dict:
+def _row(item: dict, teacher: str, body: str, target: str, source: str, answer: str) -> dict:
     return {
         "id": f"{item['id']}-{teacher}", "pid": item["id"], "problem": item["problem"],
-        "target": target, "solution": body, "teacher": teacher,
+        "target": target, "answer": answer, "solution": body, "teacher": teacher,
         "level": item["level"], "subject": item["subject"], "source": source,
     }
 
@@ -130,7 +134,7 @@ async def solve_known(item: dict, teacher_names: list[str], source: str) -> list
         responded, solved = await _solve(item["problem"], name)
         any_response = any_response or responded
         if solved and await vm.equivalent(solved[1], item["target"]):
-            rows.append(_row(item, name, solved[0], item["target"], source))
+            rows.append(_row(item, name, solved[0], item["target"], source, solved[1]))
     return rows if any_response else None
 
 
@@ -150,7 +154,7 @@ async def solve_known_one(item: dict, source: str) -> list[dict] | None:
         return None
     problem = dict(item, id=item["pid"])
     if solved and await vm.equivalent(solved[1], item["target"]):
-        return [_row(problem, item["teacher"], solved[0], item["target"], source)]
+        return [_row(problem, item["teacher"], solved[0], item["target"], source, solved[1])]
     return []
 
 
@@ -188,7 +192,7 @@ async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict] | No
     rows = []
     for name, sol in solved:
         if sol and await vm.equivalent(sol[1], target):
-            rows.append(_row(item, name, sol[0], target, "math_new"))
+            rows.append(_row(item, name, sol[0], target, "math_new", sol[1]))
     return rows
 
 
