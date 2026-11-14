@@ -68,7 +68,22 @@ each backed by a v1 failure (map in `docs/superpowers/specs/2026-11-14-v2-design
   | code-cells | 94/96 | $0.036 |
   | if-count, new mix | 84/100 | $0.06 |
   | if-new, new mix | 94/100 | $0.036 |
-- Full v2 generation is estimated at about $500 of Opus (about 6% of the weekly limit) and is awaiting approval.
+- Full generation is done: about $555 of Opus. The weekly meter went from 11% to 39%. My first estimate of 6% was wrong: on this plan, about $20 of list-price Opus work is roughly 1% of the weekly limit.
+
+  | Pool | Kept |
+  |---|---|
+  | math-long | 4,117 (median 845 tokens) |
+  | math-cells | 1,134 |
+  | code-plan | 2,163 |
+  | code-cells | 1,185 |
+  | if-count | 2,520 (stopped past its planned range; now capped in code) |
+  | if-new | 2,434 |
+- Training set (`select --v2 --math 21700 --ifeval 8000 --code 7000`; manifest at `runs/v2/manifest.json`): 38,697 examples, 19.8M tokens, about $29 to train.
+  - Math 21,700, the same size as v1: 3,769 long and 1,134 cell-targeted solutions, with the short ones dropped for those problems.
+  - Code 7,000: 1,908 plan, 1,095 cells, 3,997 direct.
+  - IF 8,000: 4,507 new-mix and 3,493 from v1.
+  - General 1,997.
+  - The test-overlap filter dropped 2,521 candidates.
 
 **Self-distillation:** on hold. It was not shown to beat Opus data and the budget was questioned.
 Pilot data is in `data/sd_*`.

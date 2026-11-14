@@ -203,14 +203,14 @@ def _weak_rule(rng: random.Random, task: str) -> dict:
     return _build("length_constraints:number_words", rng, task)
 
 
-def if_count_items(limit: int | None, skip: int = 4000) -> list[dict]:
+def if_count_items(limit: int | None, skip: int = 4000, count: int = 2000) -> list[dict]:
     """Unused base tasks (after the ones reserved for self-distillation), each with one weak counting rule.
 
     Extra rules: EXTRA_RULES more; 15% also ask for a non-English response (repetition loops on public
     IFEval were often non-English).
     """
     items = []
-    for it in if_items()[skip:]:
+    for it in if_items()[skip:skip + count]:  # stop before if-new's base tasks (skip 6000)
         rng = random.Random(f"ifc-{it['id']}")
         weak = _weak_rule(rng, it["task"])
         rest = [c for c in sample_constraints(rng, it["task"], mode="train")

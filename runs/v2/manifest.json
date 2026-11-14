@@ -1,0 +1,116 @@
+{
+  "name": "v2",
+  "seed": 20261113,
+  "sources": [
+    {
+      "name": "math_train",
+      "dataset": "DigitalLearningGmbH/MATH-lighteval",
+      "split": "train",
+      "count": 6295
+    },
+    {
+      "name": "math_new",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 14271
+    },
+    {
+      "name": "math_cells",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 1134
+    },
+    {
+      "name": "code",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 7000
+    },
+    {
+      "name": "instruction_following",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 8000
+    },
+    {
+      "name": "general",
+      "dataset": "allenai/tulu-3-sft-mixture",
+      "split": "train",
+      "count": 1997
+    }
+  ],
+  "requested": {
+    "math": 21700,
+    "code": 7000,
+    "ifeval": 8000,
+    "general": 2000
+  },
+  "shortfall": {
+    "math": 0,
+    "code": 0,
+    "ifeval": 0,
+    "general": 3
+  },
+  "total_examples": 38697,
+  "total_tokens": 19772400,
+  "estimated_cost_usd": 28.93,
+  "dropped_too_long": 132,
+  "dropped_too_long_response": 122,
+  "dropped_overlap": 1903,
+  "dropped_invalid": 1,
+  "dropped_dev_overlap": 376,
+  "dropped_dev_member": 993,
+  "dropped_duplicate": 996,
+  "dropped_by_task": {
+    "math": {
+      "invalid": 0,
+      "too_long": 8,
+      "too_long_response": 0,
+      "overlap": 1584,
+      "dev_overlap": 69,
+      "dev_member": 0,
+      "duplicate": 0
+    },
+    "code": {
+      "invalid": 0,
+      "too_long": 0,
+      "too_long_response": 0,
+      "overlap": 319,
+      "dev_overlap": 306,
+      "dev_member": 623,
+      "duplicate": 996
+    },
+    "ifeval": {
+      "invalid": 0,
+      "too_long": 0,
+      "too_long_response": 122,
+      "overlap": 0,
+      "dev_overlap": 1,
+      "dev_member": 370,
+      "duplicate": 0
+    },
+    "general": {
+      "invalid": 1,
+      "too_long": 2,
+      "too_long_response": 0,
+      "overlap": 0,
+      "dev_overlap": 0,
+      "dev_member": 0,
+      "duplicate": 0
+    }
+  },
+  "math_verified": {
+    "known_answer": 6295,
+    "agreement": 2706,
+    "single_solve": 12699
+  },
+  "overlap_filter_enabled": true,
+  "no_overlap_check_acknowledged": false,
+  "dev_overlap_filter_enabled": true,
+  "missing_pools": [],
+  "missing_dev_files": [],
+  "teachers": [
+    "claude",
+    "claude-2"
+  ]
+}
