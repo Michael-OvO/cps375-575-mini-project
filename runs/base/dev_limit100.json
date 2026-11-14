@@ -1,0 +1,14 @@
+{
+  "math": 0.17,
+  "code": 0.65,
+  "ifeval_seen": 0.3478667346591875,
+  "ifeval_unseen": 0.20764753111200318,
+  "counts": {
+    "math": 100,
+    "code": 100,
+    "ifeval_seen": 53,
+    "ifeval_unseen": 47
+  },
+  "checkpoint_path": null,
+  "split": "dev"
+}
