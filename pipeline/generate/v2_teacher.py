@@ -183,6 +183,16 @@ async def code_plan(item: dict) -> list[dict] | None:
 # ---------------------------------------------------------------- if-count
 
 EXACT_WORDS_MAX = 60  # larger exact word counts are not learnable; longer lengths use at-least/at-most bounds
+# Discovery round 1: v1 fails 86-94% of probes with 4-5 rules vs 48% with 1-2, and more often when the rules
+# come before the task (77% vs 68%). So 2-4 rules besides the first, and rules first in 40% of prompts.
+EXTRA_RULES = [1, 2, 2, 3]
+RULES_FIRST = 0.4
+
+
+def render(task: str, cons: list[dict], rng: random.Random) -> str:
+    if rng.random() < RULES_FIRST:
+        return " ".join(c["text"] for c in cons) + "\n\n" + task.strip()
+    return render_prompt(task, cons)
 
 
 def _weak_rule(rng: random.Random, task: str) -> dict:
@@ -196,8 +206,8 @@ def _weak_rule(rng: random.Random, task: str) -> dict:
 def if_count_items(limit: int | None, skip: int = 4000) -> list[dict]:
     """Unused base tasks (after the ones reserved for self-distillation), each with one weak counting rule.
 
-    Extra rules: 0, 1 or 2 more (3-rule prompts oversampled, v1 dev 37% at 3+); 15% also ask for a
-    non-English response (repetition loops on public IFEval were often non-English).
+    Extra rules: EXTRA_RULES more; 15% also ask for a non-English response (repetition loops on public
+    IFEval were often non-English).
     """
     items = []
     for it in if_items()[skip:]:
@@ -206,11 +216,11 @@ def if_count_items(limit: int | None, skip: int = 4000) -> list[dict]:
         rest = [c for c in sample_constraints(rng, it["task"], mode="train")
                 if group_of(c["id"]) != group_of(weak["id"]) and group_of(c["id"]) != "wrap"
                 and not (c["id"] == "x:exact_words" and c["kwargs"]["n"] > EXACT_WORDS_MAX)]
-        cons = [weak] + rest[: rng.choice([0, 1, 2, 2])]
+        cons = [weak] + rest[: rng.choice(EXTRA_RULES)]
         if rng.random() < 0.15 and all(group_of(c["id"]) != group_of("language:response_language") for c in cons):
             cons.append(_build("language:response_language", rng, it["task"]))
         rng.shuffle(cons)
-        items.append({"id": f"ifc-{it['id'][3:]}", "task": it["task"], "prompt": render_prompt(it["task"], cons),
+        items.append({"id": f"ifc-{it['id'][3:]}", "task": it["task"], "prompt": render(it["task"], cons, rng),
                       "constraints": [{"id": c["id"], "kwargs": c["kwargs"]} for c in cons], "teacher": "claude"})
     return items[:limit]
 
@@ -248,9 +258,9 @@ def if_new_items(limit: int | None, skip: int = 6000) -> list[dict]:
         rest = [c for c in sample_constraints(rng, it["task"], mode="train")
                 if not (groups_of(c["id"]) & taken) and group_of(c["id"]) != "wrap"
                 and not (c["id"] == "x:exact_words" and c["kwargs"]["n"] > EXACT_WORDS_MAX)]
-        cons = [first] + rest[: rng.choice([0, 1, 1, 2])]
+        cons = [first] + rest[: rng.choice(EXTRA_RULES)]
         rng.shuffle(cons)
-        items.append({"id": f"ifn-{it['id'][3:]}", "task": it["task"], "prompt": render_prompt(it["task"], cons),
+        items.append({"id": f"ifn-{it['id'][3:]}", "task": it["task"], "prompt": render(it["task"], cons, rng),
                       "constraints": [{"id": c["id"], "kwargs": c["kwargs"]} for c in cons], "teacher": "claude"})
     return items[:limit]
 

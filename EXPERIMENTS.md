@@ -57,7 +57,18 @@ each backed by a v1 failure (map in `docs/superpowers/specs/2026-11-14-v2-design
   - Code: 86% of failures fail a visible assert. Weakest: specs resolved only by the asserts, nested and date inputs, nested-list and dict outputs.
   - Math: weakest on complex, base-n, degree and radical answers, and on counting techniques.
   - IF: weakest at 4–5 rules and with rules placed before the task.
-- Next: add cell-targeted items to the v2 generators (see the action table in that report), then run the full v2 generation.
+- Generators now target the discovery findings:
+  - `pipeline/generate/v2_cells.py`: Opus writes new math problems and code tasks anchored on each weak value, then answers them in the v2 long and plan formats. Items that overlap the test sets or the probes are dropped.
+  - IF generators: 2–4 extra rules per prompt instead of 0–2, and rules placed before the task in 40% of prompts.
+- Pilot results:
+
+  | Generator | Kept | Opus cost per kept item |
+  |---|---|---|
+  | math-cells | 88/96 (median 870 student tokens) | $0.054 |
+  | code-cells | 94/96 | $0.036 |
+  | if-count, new mix | 84/100 | $0.06 |
+  | if-new, new mix | 94/100 | $0.036 |
+- Full v2 generation is estimated at about $500 of Opus (about 6% of the weekly limit) and is awaiting approval.
 
 **Self-distillation:** on hold. It was not shown to beat Opus data and the budget was questioned.
 Pilot data is in `data/sd_*`.
