@@ -366,3 +366,21 @@ def test_loud_warnings_for_shortfall_and_missing_pool(env, capsys):
     assert "WARNING: general: shortfall of 5" in out
     assert "WARNING: pool file missing" in out and "general.jsonl" in out
     assert manifest["missing_pools"] == ["general.jsonl"]
+
+
+def test_long_if_response_dropped_but_not_for_other_tasks(env):
+    assert select.MAX_IF_RESPONSE_TOKENS == 900
+    ifs = jsonl.read(select.DATA / "if_responses.jsonl")
+    ifs.append(dict(ifs[0], id=IF_IDS[0] + "-long", response="word " * 901))
+    jsonl.write(select.DATA / "if_responses.jsonl", ifs)
+    math_new = jsonl.read(select.DATA / "math_new_solutions.jsonl")
+    math_new.append(dict(math_new[0], id="mn-big-t", pid="mn-big", solution="step " * 950))
+    jsonl.write(select.DATA / "math_new_solutions.jsonl", math_new)
+    manifest = build("t", {**SIZES, "ifeval": 1000, "math": 1000})
+    dropped = jsonl.read(env / "t" / "dropped.jsonl")
+    assert {"id": IF_IDS[0] + "-long", "task": "instruction_following", "reason": "too_long_response"} in dropped
+    assert manifest["dropped_by_task"]["ifeval"]["too_long_response"] == 1
+    assert manifest["dropped_by_task"]["math"]["too_long_response"] == 0
+    assert not any(d["id"] == "mn-big-t" for d in dropped)  # 950 words is under the 2,048 rule
+    assert manifest["dropped_too_long"] >= 1 and manifest["dropped_too_long_response"] == 1
+    assert IF_IDS[0] + "-long" not in {r["id"] for r in _rows(env)}

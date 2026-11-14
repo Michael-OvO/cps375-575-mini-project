@@ -24,11 +24,14 @@ ATTEMPTS = 3
 # Teacher thinking counts against max_tokens, so both calls get the full budget.
 RESPONSE_MAX_TOKENS = 16000
 REWRITE_MAX_TOKENS = 16000
+# The student's evaluation caps output at 1,024 tokens: longer responses would teach it to be cut off.
+MAX_RESPONSE_WORDS = 600
 
 SYSTEM = (
     "Follow every instruction in the user's message exactly, including every formatting, length and "
     "wording requirement. Output only the requested content: no preamble, no closing remarks, and "
-    "no commentary about the instructions."
+    "no commentary about the instructions. Keep the response under about 350 words unless the user's "
+    "instructions require more."
 )
 
 TOPICS = [
@@ -135,7 +138,7 @@ async def respond(item: dict) -> list[dict] | None:
         if not response:
             continue
         got_response = True
-        if vi.passes(prompt, stored, response):
+        if len(response.split()) <= MAX_RESPONSE_WORDS and vi.passes(prompt, stored, response):
             # "task" is the base task before constraints, for later overlap checks.
             return [{"id": f"if-{item['id']}", "task": item["task"], "prompt": prompt,
                      "constraints": stored, "response": response, "teacher": item["teacher"]}]

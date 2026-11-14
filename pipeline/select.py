@@ -15,6 +15,7 @@ from pipeline.dev import IF_DEV_PER_MILLE, dedupe_code_tasks, is_code_dev
 from pipeline.generate.math import DEV_PER_MILLE as MATH_DEV_PER_MILLE
 from pipeline.teachers import has_control_chars
 
+MAX_IF_RESPONSE_TOKENS = 900  # assistant text of instruction-following examples (evaluation caps output at 1,024)
 MIN_SOLUTION_CHARS = 30  # non-whitespace characters in the solution body
 LEVEL_WEIGHT = {1: 1.0, 2: 1.0, 3: 1.5, 4: 2.0, 5: 2.5}
 TRAIN_PRICE_PER_M = 1.463
@@ -165,7 +166,7 @@ MATH_SOURCES = ("math_train", "math_new")
 TASKS = ("math", "code", "ifeval", "general")
 # Per-example task label written to train.jsonl and dropped.jsonl, by TASKS key.
 TASK_LABEL = {"math": "math", "code": "code", "ifeval": "instruction_following", "general": "general"}
-DROP_REASONS = ("invalid", "too_long", "overlap", "dev_overlap", "dev_member", "duplicate")
+DROP_REASONS = ("invalid", "too_long", "too_long_response", "overlap", "dev_overlap", "dev_member", "duplicate")
 
 
 def _valid(example: dict) -> bool:
@@ -257,6 +258,11 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
             if dev_filter is not None and dev_raw and dev_filter.is_leak(dev_raw):
                 drop(task, row, "dev_overlap")
                 continue
+            if task == "ifeval":
+                reply = [{"role": "user", "content": " "}, ex["messages"][1]]
+                if count(reply) > MAX_IF_RESPONSE_TOKENS:
+                    drop(task, row, "too_long_response")
+                    continue
             n = count(ex["messages"])
             if n > MAX_TRAIN_TOKENS:
                 drop(task, row, "too_long")
@@ -298,7 +304,8 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
         "shortfall": shortfall,
         "total_examples": len(kept), "total_tokens": tokens,
         "estimated_cost_usd": round(tokens / 1e6 * TRAIN_PRICE_PER_M, 2),
-        "dropped_too_long": total("too_long"), "dropped_overlap": total("overlap"),
+        "dropped_too_long": total("too_long") + total("too_long_response"),
+        "dropped_too_long_response": total("too_long_response"), "dropped_overlap": total("overlap"),
         "dropped_invalid": total("invalid"), "dropped_dev_overlap": total("dev_overlap"),
         "dropped_dev_member": total("dev_member"), "dropped_duplicate": total("duplicate"),
         "dropped_by_task": dropped_by_task,

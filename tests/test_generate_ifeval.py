@@ -164,3 +164,30 @@ def test_single_teacher_assignment(monkeypatch, tmp_path):
         gi.main()
     assert {it["teacher"] for it in seen["write_base_tasks"]} == {"claude"}
     assert seen["respond"] and {it["teacher"] for it in seen["respond"]} == {"claude"}
+
+
+def test_system_prompt_asks_for_short_responses():
+    assert "under about 350 words unless the user's instructions require more" in gi.SYSTEM
+
+
+def test_respond_rejects_over_long_response_and_retries(monkeypatch):
+    monkeypatch.setattr(gi, "sample_constraints", lambda rng, task, mode="train": [])
+    monkeypatch.setattr(gi, "REWRITE_SHARE", 0.0)
+    monkeypatch.setattr(gi.vi, "passes", lambda prompt, stored, response: True)
+    long = "word " * (gi.MAX_RESPONSE_WORDS + 1)
+    short = "word " * gi.MAX_RESPONSE_WORDS
+    assert gi.MAX_RESPONSE_WORDS == 600
+    replies = iter([long, short])
+
+    async def fake(prompt, **kw):
+        return next(replies)
+
+    monkeypatch.setattr(gi.teachers, "get", lambda name: fake)
+    rows = asyncio.run(gi.respond({"id": "bt-0-5", "task": "Describe tea.", "teacher": "claude", "seed": 7}))
+    assert [r["response"] for r in rows] == [short]
+
+    async def always_long(prompt, **kw):
+        return long
+
+    monkeypatch.setattr(gi.teachers, "get", lambda name: always_long)
+    assert asyncio.run(gi.respond({"id": "bt-0-6", "task": "Describe tea.", "teacher": "claude", "seed": 8})) == []
