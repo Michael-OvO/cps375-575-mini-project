@@ -109,3 +109,21 @@ def test_add_hidden_filters_dedupes_and_caps(monkeypatch):
 
     monkeypatch.setattr(gc.teachers, "get", lambda name: too_few)
     assert asyncio.run(gc.add_hidden(task, ["claude", "gpt"])) == []
+
+
+def test_add_hidden_single_teacher_prompt_has_no_solution(monkeypatch, caplog):
+    task = dict(TASK, id="ct-0-0", category="arithmetic", author="claude")
+    seen = []
+
+    async def good(prompt, **kw):
+        seen.append(prompt)
+        return json.dumps(["assert double(5) == 10", "assert double(10) == 20", "assert double(1) == 2"])
+
+    names = []
+    monkeypatch.setattr(gc.teachers, "get", lambda name: (names.append(name), good)[1])
+    with caplog.at_level("WARNING"):
+        rows = asyncio.run(gc.add_hidden(task, ["claude"]))
+    assert names == ["claude"] and len(rows) == 1
+    assert "return n * 2" not in seen[0] and "def double(n):" in seen[0]  # signature only, no body
+    assert TASK["text"] in seen[0] and TASK["tests"][0] in seen[0]
+    assert not caplog.records

@@ -182,3 +182,62 @@ def test_write_problems_rejects_tabs(monkeypatch):
     monkeypatch.setattr(gm.teachers, "get", _fixed({"claude": [reply]}))
     rows = asyncio.run(gm.write_problems(item))
     assert [r["problem"] for r in rows] == ["Find y if y + 1 = 4 and y is real."]
+
+
+def test_claude_only_defaults_and_single_teacher_solve_train():
+    import sys
+    from pipeline.generate import code as gc, ifeval as gi
+    for mod in (gm, gc, gi):
+        sys.argv = [mod.__name__, {gm: "dev", gc: "write", gi: "base"}[mod]]
+        import argparse
+        captured = {}
+        orig = argparse.ArgumentParser.parse_args
+
+        def spy(self, *a, **k):
+            ns = orig(self, *a, **k)
+            captured["t"] = ns.teachers
+            raise SystemExit
+        argparse.ArgumentParser.parse_args = spy
+        try:
+            try:
+                mod.main()
+            except SystemExit:
+                pass
+        finally:
+            argparse.ArgumentParser.parse_args = orig
+        assert captured["t"] == ["claude"]
+    train = [{"id": "mt-1", "problem": "p", "target": "5", "level": 1, "subject": "Algebra"},
+             {"id": "mt-2", "problem": "p", "target": "5", "level": 1, "subject": "Algebra"}]
+    items = gm.solve_known_items(train, ["claude"])
+    assert [it["id"] for it in items] == ["mt-1-claude", "mt-2-claude"]
+
+
+def test_solve_unknown_single_teacher_separate_calls_and_tiebreak(monkeypatch):
+    calls = []
+
+    def fake_get(name):
+        replies = iter(["We add them up.\nANSWER: 7", "Another way to add.\nANSWER: 8",
+                        "Careful high effort pass.\nANSWER: 8"])
+
+        async def f(prompt, **kw):
+            calls.append((name, kw.get("effort", "medium")))
+            return next(replies)
+        return f
+    shared = fake_get("claude")
+    monkeypatch.setattr(gm.teachers, "get", lambda name: shared)
+    item = {"id": "mn-0-0", "problem": "?", "level": 3, "subject": "Algebra"}
+    rows = asyncio.run(gm.solve_unknown(item, ["claude"]))
+    assert calls == [("claude", "medium"), ("claude", "medium"), ("claude", "high")]  # two independent first solves
+    assert {r["teacher"] for r in rows} == {"claude-2", "claude-tiebreak"}
+    assert len({r["id"] for r in rows}) == 2
+    # all three differ -> dropped
+    replies = iter(["a b c d\nANSWER: 1", "a b c d\nANSWER: 2", "a b c d\nANSWER: 3"])
+
+    async def differ(prompt, **kw):
+        return next(replies)
+    monkeypatch.setattr(gm.teachers, "get", lambda name: differ)
+    assert asyncio.run(gm.solve_unknown(item, ["claude"])) == []
+    # agreement accepts with labels claude and claude-2, no tie-break call
+    replies = iter(["a b c d\nANSWER: 4", "e f g h\nANSWER: 4"])
+    rows = asyncio.run(gm.solve_unknown(item, ["claude"]))
+    assert {r["teacher"] for r in rows} == {"claude", "claude-2"}

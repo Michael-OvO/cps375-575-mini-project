@@ -146,7 +146,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     p = argparse.ArgumentParser()
     p.add_argument("command", choices=["base", "respond"])
-    p.add_argument("--teachers", nargs="+", default=["claude", "gpt"])
+    p.add_argument("--teachers", nargs="+", default=["claude"])
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
     args = p.parse_args()

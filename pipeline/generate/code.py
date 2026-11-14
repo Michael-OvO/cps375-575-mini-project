@@ -172,7 +172,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     p = argparse.ArgumentParser()
     p.add_argument("command", choices=["write", "hidden"])
-    p.add_argument("--teachers", nargs="+", default=["claude", "gpt"])
+    p.add_argument("--teachers", nargs="+", default=["claude"])
     p.add_argument("--calls-per-category", type=int, default=40)
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)

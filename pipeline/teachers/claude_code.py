@@ -47,7 +47,7 @@ def _record(data: dict) -> None:
 
 async def complete(
     prompt: str, system: str | None = None, effort: str = "medium", max_tokens: int = 16000,
-    timeout: float = 900,
+    timeout: float = 1800,
 ) -> str | None:
     # max_tokens is accepted for interface parity only: the CLI has no such flag, so it is not passed.
     argv = ["claude", "-p", "--system-prompt", system or DEFAULT_SYSTEM, "--tools", "",

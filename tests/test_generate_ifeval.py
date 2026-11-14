@@ -146,3 +146,21 @@ def test_respond_uses_16000_tokens_and_stores_base_task(monkeypatch):
     assert seen == [16000, 16000]
     assert rows[0]["task"] == "  Describe tea."
     assert rows[0]["prompt"].startswith("Describe tea.")
+
+
+def test_single_teacher_assignment(monkeypatch, tmp_path):
+    import sys
+    seen = {}
+
+    async def fake_run_many(items, fn, out, concurrency=16):
+        seen[fn.__name__] = items
+
+    monkeypatch.setattr(gi, "run_many", fake_run_many)
+    monkeypatch.setattr(gi.teachers, "check_configured", lambda names: None)
+    monkeypatch.setattr(gi.teachers, "write_usage", lambda out: None)
+    monkeypatch.setattr(gi.jsonl, "read", lambda p: [{"id": f"bt-{i}", "task": "t"} for i in range(30)])
+    for cmd in ("base", "respond"):
+        monkeypatch.setattr(sys, "argv", ["ifeval", cmd, "--limit", "20"])
+        gi.main()
+    assert {it["teacher"] for it in seen["write_base_tasks"]} == {"claude"}
+    assert seen["respond"] and {it["teacher"] for it in seen["respond"]} == {"claude"}

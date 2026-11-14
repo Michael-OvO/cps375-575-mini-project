@@ -1,4 +1,8 @@
-"""Claude teacher. Anthropic SDK only."""
+"""Claude teacher through the Anthropic API-key client (registry name "claude_api").
+
+The default "claude" teacher is pipeline.teachers.claude_code (Claude Code CLI); its usage is reported
+under "claude" in the usage snapshot, this module's under "claude_api".
+"""
 
 import anthropic
 
