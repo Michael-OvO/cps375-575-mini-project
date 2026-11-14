@@ -58,7 +58,8 @@ async def score_items(sampler, math: list[dict], code: list[dict], ifd: list[dic
     if_scores = await asyncio.gather(*(one_if(i) for i in ifd))
     seen = [s for kind, s in if_scores if kind == "seen"]
     unseen = [s for kind, s in if_scores if kind == "unseen"]
-    return {
+    unseen_new = [s for kind, s in if_scores if kind == "unseen_new"]
+    result = {
         "math": sum(math_ok) / max(len(math_ok), 1),
         "code": sum(code_ok) / max(len(code_ok), 1),
         "ifeval_seen": if_metric(seen),
@@ -66,6 +67,10 @@ async def score_items(sampler, math: list[dict], code: list[dict], ifd: list[dic
         "counts": {"math": len(math), "code": len(code),
                    "ifeval_seen": len(seen), "ifeval_unseen": len(unseen)},
     }
+    if unseen_new:  # data/if_dev_new.jsonl: first constraint is one of the 6 v2 held-out types
+        result["ifeval_unseen_new"] = if_metric(unseen_new)
+        result["counts"]["ifeval_unseen_new"] = len(unseen_new)
+    return result
 
 
 def _load(name: str, split: str, limit: int | None) -> list[dict]:
@@ -81,8 +86,10 @@ def _load(name: str, split: str, limit: int | None) -> list[dict]:
 
 def load_split(split: str = "dev", limit: int | None = None) -> tuple[list, list, list]:
     """(math, code, instruction following) dev items; raises on a missing or empty file."""
-    return (_load("math_dev.jsonl", split, limit), _load("code_dev.jsonl", split, limit),
-            _load("if_dev.jsonl", split, limit))
+    ifd = _load("if_dev.jsonl", split, limit)
+    if (DATA / "if_dev_new.jsonl").exists():  # optional v2 held-out set; absent for older runs
+        ifd = ifd + _load("if_dev_new.jsonl", split, limit)
+    return (_load("math_dev.jsonl", split, limit), _load("code_dev.jsonl", split, limit), ifd)
 
 
 async def evaluate(sampler, split: str = "dev", limit: int | None = None) -> dict:

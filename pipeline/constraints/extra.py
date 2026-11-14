@@ -1,7 +1,13 @@
 """Constraint types written for this project, each with its own verifier.
 
-Thirty are used in training. Six are dev-only: they appear only in the private
-dev set, to measure generalisation to constraint types never trained on.
+The first 36 (`_V1`) were used for the v1 run: thirty in training and six dev-only. `_NEW`
+adds 29 more types from under-represented families (positional, punctuation counts,
+per-paragraph, ordering/repetition, character-level, simple formats); six of those are
+dev-only too. Dev-only types appear only in the private dev sets, to measure
+generalisation to constraint types never trained on.
+
+`group` is the one slot a type occupies in a prompt; `blocks` lists further groups it
+conflicts with, so the sampler never pairs it with a type of those groups either.
 """
 
 import random
@@ -100,6 +106,7 @@ class Extra:
     template: str
     check: Callable[[str, dict], bool]
     dev_only: bool = False
+    blocks: tuple[str, ...] = ()
 
     def describe(self, kwargs: dict) -> str:
         return self.template.format(**kwargs)
@@ -132,7 +139,7 @@ def _order(t, k):
     return bool(a and b and a.start() < b.start())
 
 
-_ALL = [
+_V1 = [
     Extra("x:start_phrase", "start", lambda r: {"phrase": r.choice(PHRASES)},
           'Begin your response with the exact phrase "{phrase}".',
           lambda t, k: t.strip().startswith(k["phrase"])),
@@ -225,4 +232,217 @@ _ALL = [
           lambda t, k: t.count('"') == 2 * k["n"], dev_only=True),
 ]
 
+REPEAT_PHRASES = [
+    "step by step", "in the end", "make it simple", "one more thing", "as it turns out",
+    "on the other hand", "little by little", "at the same time",
+]
+ACROSTIC_WORDS = ["SUN", "OAK", "MAP", "SKY", "TEA", "ARC", "PATH", "WIND", "GOLD", "LAMP"]
+CLOSING_LABELS = ["Takeaway", "Verdict", "Bottom line", "Next step", "In brief"]
+SCORE_LABELS = ["Score", "Rating", "Confidence"]
+
+_BULLET = re.compile(r"^\s*-\s+(\S.*)$")
+_KV_LINE = re.compile(r"^\s*(?:[-*•]\s+|\d+[.)]\s+)?(?:\*\*)?[A-Za-z][A-Za-z-]*(?:\*\*)?:(?:\*\*)?\s+\S")
+_TAG = re.compile(r"\[[A-Z]{2,}(?:[ _-][A-Z]+)*\]")
+_ELLIPSIS = re.compile(r"(?<!\.)\.\.\.(?!\.)")
+
+
+def _plain(line: str) -> str:
+    """A line without list marker or inline markdown emphasis, stripped."""
+    return _LIST_MARKER.sub("", re.sub(r"[*_`]", "", line)).strip()
+
+
+def _first_pos(text: str, word: str) -> int:
+    m = re.search(rf"\b{re.escape(word)}\b", text, flags=re.IGNORECASE)
+    return m.start() if m else -1
+
+
+def _nth_sentence_ok(t, k):
+    s = sentences(t)
+    return len(s) >= k["n"] and _first_word(s[k["n"] - 1]) == k["word"]
+
+
+def _acrostic_ok(t, k):
+    ps = paragraphs(t)
+    if len(ps) != len(k["word"]):
+        return False
+    firsts = [words(_LIST_MARKER.sub("", p)) for p in ps]
+    return all(f and f[0][0].lower() == ch.lower() for f, ch in zip(firsts, k["word"]))
+
+
+def _distinct_starts(t, k):
+    firsts = [_first_word(s) for s in sentences(t)]
+    return bool(firsts) and len(firsts) == len(set(firsts))
+
+
+def _final_one_sentence(t, k):
+    ps = paragraphs(t)
+    return len(ps) >= 2 and len(sentences(ps[-1])) == 1
+
+
+def _bullets_ok(t, k):
+    items = [m.group(1) for ln in lines(t) if (m := _BULLET.match(ln))]
+    return len(items) == k["n"] and all(len(words(i)) < k["m"] for i in items)
+
+
+def _steps_ok(t, k):
+    nums = [int(x) for x in re.findall(r"\bStep (\d+)\b", t, flags=re.IGNORECASE)]
+    return nums == list(range(1, k["n"] + 1))
+
+
+def _alpha_ok(t, k):
+    ws = [k["a"], k["b"], k["c"]]
+    pos = {w: _first_pos(t, w) for w in ws}
+    if min(pos.values()) < 0:
+        return False
+    return sorted(ws, key=lambda w: pos[w]) == sorted(ws)
+
+
+def _not_first_paragraph(t, k):
+    ps = paragraphs(t)
+    return (len(ps) >= 2 and _count_word(ps[0], k["word"]) == 0
+            and any(_count_word(p, k["word"]) > 0 for p in ps[1:]))
+
+
+def _repeat_cap(t, k):
+    counts: dict[str, int] = {}
+    for w in words(t):
+        if len(w) >= 4:
+            counts[w.lower()] = counts.get(w.lower(), 0) + 1
+    return max(counts.values(), default=0) <= k["n"]
+
+
+def _all_caps_count(t, k):
+    return sum(1 for w in words(t) if len(re.sub(r"[^A-Za-z]", "", w)) >= 2 and w.isupper()) == k["n"]
+
+
+def _long_words(t, k):
+    return len({w.lower() for w in words(t) if len(re.sub(r"[^A-Za-z]", "", w)) >= k["L"]}) >= k["n"]
+
+
+def _double_letters(t, k):
+    return len({w.lower() for w in words(t) if re.search(r"([a-z])\1", w.lower())}) >= k["n"]
+
+
+def _closing_ok(t, k):
+    ls = lines(t)
+    if not ls:
+        return False
+    last = _plain(ls[-1])
+    head = k["label"].lower() + ":"
+    if not last.lower().startswith(head):
+        return False
+    return 1 <= len(words(last[len(head):])) <= k["n"]
+
+
+def _score_ok(t, k):
+    pat = re.compile(rf"{re.escape(k['label'])}:\s*(?:10|[1-9])\s*/\s*10\.?", flags=re.IGNORECASE)
+    return any(pat.fullmatch(_plain(ln)) for ln in lines(t))
+
+
+def _comma_range(r):
+    lo = r.randint(3, 10)
+    return {"lo": lo, "hi": lo + r.randint(4, 8)}
+
+
+def _three(r):
+    a, b, c = r.sample(KEYWORDS, 3)
+    return {"a": a, "b": b, "c": c}
+
+
+_NEW = [
+    # Positional.
+    Extra("x:nth_sentence_start", "position", lambda r: {"n": r.randint(2, 4), "word": r.choice(KEYWORDS)},
+          'Sentence number {n} of your response must begin with the word "{word}".',
+          _nth_sentence_ok, dev_only=True),
+    Extra("x:line_end_char", "end", lambda r: {"ch": r.choice([".", "~"])},
+          'End every non-empty line of your response with the character "{ch}".',
+          lambda t, k: bool(lines(t)) and all(ln.rstrip().endswith(k["ch"]) for ln in lines(t))),
+    Extra("x:paragraph_acrostic", "structure", lambda r: {"word": r.choice(ACROSTIC_WORDS)},
+          'Write one paragraph per letter of "{word}", separated by blank lines, so that the first '
+          'letters of the paragraphs spell "{word}" in order.',
+          _acrostic_ok, blocks=("start", "wrap")),
+    Extra("x:paragraph_end_word", "end", _kw, 'End every paragraph with the word "{word}".',
+          lambda t, k: bool(paragraphs(t)) and all(_last_word(p) == k["word"] for p in paragraphs(t)),
+          blocks=("keyword",)),
+    Extra("x:distinct_sentence_starts", "start", lambda r: {},
+          "No two sentences in your response may begin with the same word.", _distinct_starts),
+    Extra("x:final_paragraph_one_sentence", "structure", lambda r: {},
+          "Write at least two paragraphs separated by blank lines, and make the final paragraph a single sentence.",
+          _final_one_sentence, blocks=("end", "wrap")),
+    # Punctuation and symbol counts.
+    Extra("x:colon_count", "chars", _n(1, 4), "Use exactly {n} colons in your response.",
+          lambda t, k: t.count(":") == k["n"]),
+    Extra("x:em_dash_count", "chars", _n(1, 3), 'Use the em dash character "—" exactly {n} times.',
+          lambda t, k: t.count("—") == k["n"], dev_only=True),
+    Extra("x:exclaim_count", "chars", _n(1, 3), "Use exactly {n} exclamation marks.",
+          lambda t, k: t.count("!") == k["n"]),
+    Extra("x:ellipsis_count", "chars", _n(1, 3),
+          'Use exactly {n} ellipses, each written as three periods ("...").',
+          lambda t, k: len(_ELLIPSIS.findall(t)) == k["n"]),
+    Extra("x:comma_range", "chars", _comma_range, "Use between {lo} and {hi} commas (inclusive).",
+          lambda t, k: k["lo"] <= t.count(",") <= k["hi"], blocks=("wrap",)),
+    # Per-line and per-paragraph.
+    Extra("x:paragraph_sentences", "structure", _n(2, 4),
+          "Every paragraph (paragraphs are separated by blank lines) must contain exactly {n} sentences.",
+          lambda t, k: bool(paragraphs(t)) and all(len(sentences(p)) == k["n"] for p in paragraphs(t)),
+          dev_only=True, blocks=("length",)),
+    Extra("x:bullet_item_max_words", "structure", lambda r: {"n": r.randint(3, 6), "m": r.randint(8, 15)},
+          'Include a bulleted list of exactly {n} items, each starting with "- ", and keep every item '
+          "under {m} words.", _bullets_ok, blocks=("wrap",)),
+    Extra("x:paragraphs_min_words", "structure",
+          lambda r: {"n": r.randint(2, 4), "m": r.randrange(30, 51, 5)},
+          "Write exactly {n} paragraphs separated by blank lines, each at least {m} words long.",
+          lambda t, k: len(paragraphs(t)) == k["n"] and all(len(words(p)) >= k["m"] for p in paragraphs(t)),
+          blocks=("length", "wrap")),
+    # Ordering and repetition.
+    Extra("x:phrase_repeat", "repeat", lambda r: {"phrase": r.choice(REPEAT_PHRASES), "n": r.randint(2, 4)},
+          'Use the exact phrase "{phrase}" exactly {n} times.',
+          lambda t, k: _count_word(t, k["phrase"]) == k["n"]),
+    Extra("x:keywords_alpha", "keyword", _three,
+          'Use each of the words "{a}", "{b}" and "{c}", arranged so that their first appearances '
+          "follow alphabetical order.", _alpha_ok, dev_only=True),
+    Extra("x:keyword_not_first_paragraph", "keyword", _kw,
+          'Do not use the word "{word}" in your first paragraph, but use it at least once in a later '
+          "paragraph.", _not_first_paragraph, blocks=("wrap",)),
+    Extra("x:keyword_every_paragraph", "keyword", _kw, 'Use the word "{word}" at least once in every paragraph.',
+          lambda t, k: bool(paragraphs(t)) and all(_count_word(p, k["word"]) > 0 for p in paragraphs(t))),
+    Extra("x:word_repeat_cap", "repeat", _n(3, 5),
+          "No word of four or more letters may appear more than {n} times (ignoring case).",
+          _repeat_cap, blocks=("keyword",)),
+    # Character-level.
+    Extra("x:all_caps_count", "case", _n(1, 4),
+          "Include exactly {n} words written entirely in capital letters (two or more letters each).",
+          _all_caps_count),
+    Extra("x:initial_letter_count", "letters",
+          lambda r: {"letter": r.choice("bcdfmpst"), "n": r.randint(5, 12)},
+          'Use at least {n} words that begin with the letter "{letter}".',
+          lambda t, k: sum(1 for w in words(t) if w.lower().startswith(k["letter"])) >= k["n"]),
+    Extra("x:long_words", "wordlen", lambda r: {"n": r.randint(2, 5), "L": r.randint(10, 12)},
+          "Use at least {n} different words that are {L} or more letters long.", _long_words),
+    Extra("x:double_letter_words", "doubles", _n(3, 8),
+          'Use at least {n} different words that contain the same letter twice in a row (as in "coffee" '
+          'or "balloon").', _double_letters, dev_only=True),
+    Extra("x:lipogram", "letters", lambda r: {"letter": r.choice("jqx")},
+          'Do not use the letter "{letter}" anywhere in your response (upper or lower case).',
+          lambda t, k: k["letter"] not in t.lower(), blocks=("keyword", "start", "end")),
+    # Simple formats.
+    Extra("x:key_value_lines", "kv", _n(3, 6),
+          'Include exactly {n} lines formatted as "Key: value", where each key is a single word.',
+          lambda t, k: sum(1 for ln in lines(t) if _KV_LINE.match(ln)) == k["n"], blocks=("chars", "wrap")),
+    Extra("x:bracket_tags", "tags", _n(1, 4),
+          "Include exactly {n} bracketed tags written in capital letters, such as [TIP] or [NOTE].",
+          lambda t, k: len(_TAG.findall(t)) == k["n"], dev_only=True, blocks=("placeholders", "case")),
+    Extra("x:closing_label_line", "end", lambda r: {"label": r.choice(CLOSING_LABELS), "n": r.randint(3, 8)},
+          'Finish with a separate final line that starts with "{label}:" followed by no more than {n} words.',
+          _closing_ok, blocks=("chars",)),
+    Extra("x:score_line", "digits", lambda r: {"label": r.choice(SCORE_LABELS)},
+          'Include a line that reads "{label}: X/10", where X is a whole number from 1 to 10.',
+          _score_ok, blocks=("chars", "wrap")),
+    Extra("x:step_labels", "structure", _n(3, 6),
+          'Lay out your answer as exactly {n} steps labelled "Step 1", "Step 2", and so on up to "Step {n}".',
+          _steps_ok, blocks=("digits",)),
+]
+
+_ALL = _V1 + _NEW
+V1_IDS = frozenset(e.id for e in _V1)
 REGISTRY: dict[str, Extra] = {e.id: e for e in _ALL}

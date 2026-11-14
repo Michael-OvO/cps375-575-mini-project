@@ -42,6 +42,14 @@ def has_loop(text: str, tail: int = 200) -> bool:
 
 # ---------------------------------------------------------------- item sources
 
+def math_items_v2(min_level: int, max_new: int) -> list[dict]:
+    """Every hard MATH-train problem first, then up to max_new hard teacher-new problems."""
+    items = math_items(min_level)
+    train = [i for i in items if i["source"] == "math_train"]
+    new = [i for i in items if i["source"] == "math_new"]
+    return train + new[:max_new]
+
+
 def math_items(min_level: int) -> list[dict]:
     rows = {}
     for r in jsonl.read(DATA / "math_train_solutions.jsonl"):
@@ -187,11 +195,15 @@ def main() -> None:
     p.add_argument("--n", type=int, default=4)
     p.add_argument("--temperature", type=float, default=0.8)
     p.add_argument("--min_level", type=int, default=4)
+    p.add_argument("--max_new", type=int, default=None,
+                   help="math: all hard MATH-train problems plus this many hard teacher-new problems")
     p.add_argument("--out", required=True)
     args = p.parse_args()
     if args.task == "if" and not args.checkpoint_path:
         p.error("if sampling uses a trained checkpoint (--checkpoint_path)")
-    items = {"math": lambda: math_items(args.min_level), "code": code_items, "if": if_items}[args.task]()
+    math_src = (lambda: math_items_v2(args.min_level, args.max_new)) if args.max_new is not None \
+        else (lambda: math_items(args.min_level))
+    items = {"math": math_src, "code": code_items, "if": if_items}[args.task]()
     items = items[: args.limit]
     out = Path(args.out)
     stats = asyncio.run(run(args.task, items, args.checkpoint_path, args.n, args.temperature, out))

@@ -4,8 +4,8 @@ from pipeline.constraints import extra
 
 
 def test_registry_shape():
-    assert len(extra.REGISTRY) == 36
-    assert sum(1 for e in extra.REGISTRY.values() if e.dev_only) == 6
+    assert len(extra.REGISTRY) == 65
+    assert sum(1 for e in extra.REGISTRY.values() if e.dev_only) == 12
     assert all(cid.startswith("x:") for cid in extra.REGISTRY)
 
 
