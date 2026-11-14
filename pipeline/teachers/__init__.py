@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -22,6 +23,14 @@ _CONTROL = re.compile(r"[\x00-\x09\x0b\x0c\x0e-\x1f]")
 _CONTROL_NO_TAB = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
+class TeacherError(RuntimeError):
+    """A teacher call failed (process error, timeout, bad output, CLI-reported error)."""
+
+
+class TeacherUnavailable(TeacherError):
+    """The teacher cannot serve calls now (rate or usage limit, auth problem): retrying is pointless."""
+
+
 def has_control_chars(text: str, allow_tab: bool = False) -> bool:
     return bool((_CONTROL_NO_TAB if allow_tab else _CONTROL).search(text or ""))
 
@@ -39,9 +48,12 @@ def check_configured(names) -> None:
             if not os.environ.get("TINKER_API_KEY"):
                 missing.append("tinker: TINKER_API_KEY is not set")
         elif name == "claude":
+            if not shutil.which("claude"):
+                missing.append("claude: the `claude` (Claude Code) executable is not on PATH")
+        elif name == "claude_api":
             if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
                     or (Path.home() / ".config" / "anthropic").is_dir()):
-                missing.append("claude: set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, "
+                missing.append("claude_api: set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, "
                                "or log in with `ant auth login` (~/.config/anthropic)")
         else:
             missing.append(f"{name}: unknown teacher")
@@ -70,8 +82,9 @@ def record_usage(counter: dict, response) -> None:
 def usage_snapshot() -> dict:
     """Usage so far in this process, per teacher module that has been loaded."""
     out = {}
-    for name in ("claude", "gpt"):
-        module = sys.modules.get(f"pipeline.teachers.{name}")
+    # teacher name -> module; "claude" is the Claude Code backend, "claude_api" the API-key client
+    for name, mod in (("claude", "claude_code"), ("claude_api", "claude"), ("gpt", "gpt")):
+        module = sys.modules.get(f"pipeline.teachers.{mod}")
         if module is not None:
             out[name] = json.loads(json.dumps(module.USAGE))
     return out
@@ -103,6 +116,9 @@ def write_usage(out_path) -> dict:
 
 def get(name: str):
     if name == "claude":
+        from pipeline.teachers import claude_code
+        return claude_code.complete
+    if name == "claude_api":
         from pipeline.teachers import claude
         return claude.complete
     if name == "gpt":
