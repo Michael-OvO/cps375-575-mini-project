@@ -30,3 +30,8 @@ evaluation/baseline_results.json
 data/
 runs/**/train.jsonl
 runs/**/*.log
+
+# Large per-item run outputs (regenerate with pipeline.error_analysis / train_sft)
+runs/*/errors/
+runs/*/dropped.jsonl
+evaluation/submission.json
