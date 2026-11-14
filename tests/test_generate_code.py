@@ -141,9 +141,10 @@ def test_style_split_is_deterministic_and_mixed():
     items = gc.write_items(["claude", "gpt"], 40)
     again = gc.write_items(["claude", "gpt"], 40)
     assert [it["style"] for it in items] == [it["style"] for it in again]
-    share = sum(it["style"] == "terse" for it in items) / len(items)
-    assert 0.6 <= share <= 0.8
-    assert {it["style"] for it in items[:40]} == {"terse", "detailed"}
+    for style, target in (("plain", 0.4), ("terse", 0.3), ("detailed", 0.3)):
+        share = sum(it["style"] == style for it in items) / len(items)
+        assert abs(share - target) <= 0.10, (style, share)
+    assert {it["style"] for it in items[:40]} == {"plain", "terse", "detailed"}
 
 
 def test_prompt_style_instructions():
@@ -170,3 +171,37 @@ def test_terse_length_enforced_and_style_stored(monkeypatch, caplog):
     assert "dropped 1 terse" in caplog.text
     rows = asyncio.run(gc.write_tasks(_detailed_item()))
     assert len(rows) == 2 and all(r["style"] == "detailed" for r in rows)
+
+
+def _plain_item(call=0, category="string manipulation"):
+    return dict(_item(), style="plain", category=category, call=call)
+
+
+def test_every_category_has_subtopics():
+    assert set(gc.SUBTOPICS) == set(gc.CATEGORIES)
+    assert all(4 <= len(v) <= 6 for v in gc.SUBTOPICS.values())
+
+
+def test_plain_prompt_has_subtopic_and_no_framing():
+    for call in range(7):
+        text = gc.write_prompt(_plain_item(call))
+        topic = gc.SUBTOPICS["string manipulation"][call % len(gc.SUBTOPICS["string manipulation"])]
+        assert topic in text and "at most 15 words" in text and "exactly 3 assert statements" in text
+        assert "differ from each other" in text
+        assert "textbook" not in text and "frame" not in text.lower()
+        assert not any(f in text for f in gc.FRAMINGS)
+    assert len({gc.write_prompt(_plain_item(c)) for c in range(40)}) == 40
+    framed = gc.write_prompt(_terse_item())
+    assert "textbook" in framed and "frame" in framed
+
+
+def test_plain_length_enforced_and_style_stored(monkeypatch):
+    long = dict(TASK, text=" ".join(["word"] * 25))
+    short = dict(TASK, text=" ".join(["word"] * 12))
+
+    async def fake(prompt, **kw):
+        return json.dumps([long, short])
+
+    monkeypatch.setattr(gc.teachers, "get", lambda name: fake)
+    rows = asyncio.run(gc.write_tasks(_plain_item()))
+    assert [r["id"] for r in rows] == ["ct-0-1"] and rows[0]["style"] == "plain"

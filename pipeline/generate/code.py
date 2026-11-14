@@ -51,6 +51,50 @@ FRAMINGS = [
     "sports scores and rankings", "sensor readings",
 ]
 
+# Plain-style calls ask for basic exercises on one sub-topic of the category, chosen by call index.
+SUBTOPICS = {
+    "string manipulation": ["casing", "trimming and padding", "splitting and joining", "replacing substrings", "reversing", "character positions"],
+    "string searching and counting": ["counting characters", "finding substrings", "first and last occurrences", "prefixes and suffixes", "counting vowels and consonants"],
+    "string formatting and parsing": ["padding numbers", "parsing integers from text", "joining with separators", "key=value pairs", "title and sentence formatting"],
+    "list filtering": ["even and odd values", "values above a threshold", "removing negatives", "filtering by length", "keeping every nth element"],
+    "list transformation": ["squaring and doubling", "converting types", "reversing and rotating", "adding a constant", "flattening pairs"],
+    "list aggregation": ["sum and product", "minimum and maximum", "average", "second largest", "counting matches"],
+    "sorting with custom keys": ["sorting by length", "sorting by last character", "descending order", "sorting by absolute value", "sorting strings ignoring case"],
+    "searching in sorted lists": ["binary search", "insertion position", "first element at least a target", "counting elements below a value", "membership in a sorted list"],
+    "nested lists and matrices": ["row sums", "column sums", "transposing", "diagonal elements", "flattening", "finding the largest entry"],
+    "tuples": ["swapping elements", "unpacking", "tuple of min and max", "concatenating tuples", "indexing and slicing"],
+    "lists of tuples": ["sorting by second element", "summing a field", "finding the maximum pair", "unzipping", "filtering pairs"],
+    "dictionaries": ["counting keys", "merging two dictionaries", "inverting a dictionary", "looking up with a default", "summing values"],
+    "dictionaries of lists": ["grouping items by key", "lengths of the lists", "largest list", "flattening values", "adding to a list under a key"],
+    "sets": ["union and intersection", "difference", "unique elements", "subset checks", "symmetric difference"],
+    "number theory": ["even and odd checks", "greatest common divisor", "least common multiple", "perfect numbers", "modular arithmetic"],
+    "primes and divisors": ["primality test", "listing divisors", "counting primes up to n", "prime factors", "sum of divisors"],
+    "digits of integers": ["sum of digits", "counting digits", "reversing a number", "largest digit", "palindromic numbers"],
+    "arithmetic and rounding": ["rounding to places", "floor and ceiling division", "remainders", "absolute difference", "average of numbers"],
+    "sequences and series": ["Fibonacci numbers", "arithmetic progression", "geometric progression", "sum of the first n integers", "triangular and square numbers"],
+    "combinatorics": ["factorial", "permutations count", "combinations count", "pairs from a list", "subsets of a small list"],
+    "geometry formulas": ["area of a rectangle or triangle", "circle area and circumference", "perimeter", "distance between points", "Pythagorean triples"],
+    "bit manipulation": ["counting set bits", "checking powers of two", "setting and clearing a bit", "XOR tricks", "parity"],
+    "base conversion": ["decimal to binary", "binary to decimal", "hexadecimal", "any base up to 16", "octal"],
+    "recursion": ["factorial", "sum of a list", "power of a number", "reversing a string", "counting down", "Fibonacci"],
+    "simple dynamic programming": ["climbing stairs", "Fibonacci with memoization", "coin change count", "maximum subarray sum", "longest increasing run"],
+    "two-pointer techniques": ["pair with a target sum in a sorted list", "reversing in place", "removing duplicates from a sorted list", "merging sorted lists", "palindrome check"],
+    "sliding windows": ["maximum sum of k consecutive items", "moving averages", "longest run of equal values", "distinct values in each window", "smallest window meeting a sum"],
+    "stacks and queues": ["balanced brackets", "reversing with a stack", "queue simulation", "evaluating postfix expressions", "last in first out order"],
+    "regular expressions": ["matching digits", "extracting words", "validating simple patterns", "replacing patterns", "splitting on patterns"],
+    "character classification": ["letters and digits", "uppercase and lowercase counts", "vowels and consonants", "whitespace and punctuation", "ASCII codes"],
+    "palindromes and anagrams": ["palindrome check", "ignoring case and spaces", "anagram check", "longest palindromic prefix", "grouping anagrams"],
+    "dates and times arithmetic": ["leap years", "days in a month", "converting seconds to hours and minutes", "day of the year", "adding days to a date"],
+    "intervals and ranges": ["overlap of two intervals", "merging intervals", "point inside a range", "length of a range", "clamping a value"],
+    "frequency counting": ["counting elements", "most common element", "elements appearing once", "character frequencies", "counting words"],
+    "removing duplicates": ["keeping the first occurrence", "preserving order", "counting distinct items", "removing adjacent duplicates", "finding the duplicates"],
+    "merging and zipping collections": ["zipping two lists", "interleaving", "merging sorted lists", "pairing keys with values", "concatenating lists"],
+    "boolean checks and validation": ["all and any checks", "range checks", "is the list sorted", "valid identifiers", "empty or non-empty checks"],
+    "math with fractions and gcd": ["simplifying a fraction", "adding fractions", "comparing fractions", "gcd of a list", "reducing a ratio"],
+    "text tokenizing and word statistics": ["counting words", "longest word", "average word length", "capitalizing each word", "unique words"],
+    "heap and priority selection": ["k smallest items", "k largest items", "merging sorted lists with a heap", "smallest item repeatedly removed", "running minimum"],
+}
+
 WRITE_PROMPT = """Write 5 short Python programming tasks in the category: {category}.
 
 Each task is a one-sentence description beginning "Write a function to" or "Write a python function \
@@ -70,6 +114,24 @@ of); write less obvious tasks instead.
 
 Return only a JSON array of 5 objects with keys "text", "code" and "tests" (a list of 3 strings)."""
 
+PLAIN_PROMPT = """Write 5 short, basic Python programming tasks in the category: {category}.
+
+Each task is a one-sentence description beginning "Write a function to" or "Write a python function \
+to", a correct reference solution, and exactly 3 assert statements that call the function.
+
+Sub-topic for this batch (batch {call} for this category): {subtopic}.
+
+Requirements:
+- Basic, self-contained exercises of the kind found in an introductory programming problem set, \
+typical of the sub-topic. No real-world story or framing: just the plain operation.
+- Ask for 5 tasks that differ from each other: five different typical exercises within the sub-topic.
+- Solvable in under 10 lines.
+- Standard library only. No input(), no printing, no files, no randomness, no network.
+{style_rule}
+- The asserts must be deterministic and compare with ==.
+
+Return only a JSON array of 5 objects with keys "text", "code" and "tests" (a list of 3 strings)."""
+
 DETAILED_RULE = """- The description must be short and natural, like a textbook exercise. It does not name the \
 function or its parameters: those are fixed by the tests."""
 
@@ -79,7 +141,8 @@ the details to the tests: the 3 asserts must carry them, and at least one should
 case (such as an empty or single-element input) where that makes sense. The description does not \
 name the function or its parameters: those are fixed by the tests."""
 
-TERSE_FRACTION = 0.7
+PLAIN_FRACTION = 0.4  # buckets of 1000: plain, then terse (framed), then detailed
+TERSE_FRACTION = 0.3
 MAX_TERSE_WORDS = 18  # the prompt asks for 15; small tolerance
 
 HIDDEN_PROMPT = """A Python function is described as follows:
@@ -128,13 +191,20 @@ def _valid(task) -> bool:
 
 
 def style_of(call_id: str) -> str:
-    """Deterministic per-call description style: ~70% terse, ~30% detailed."""
+    """Deterministic per-call description style: ~40% plain, ~30% terse (framed), ~30% detailed."""
     bucket = int(hashlib.md5(call_id.encode()).hexdigest(), 16) % 1000
-    return "terse" if bucket < TERSE_FRACTION * 1000 else "detailed"
+    if bucket < PLAIN_FRACTION * 1000:
+        return "plain"
+    return "terse" if bucket < (PLAIN_FRACTION + TERSE_FRACTION) * 1000 else "detailed"
 
 
 def write_prompt(item: dict) -> str:
-    rule = TERSE_RULE if item.get("style") == "terse" else DETAILED_RULE
+    style = item.get("style")
+    if style == "plain":
+        subtopics = SUBTOPICS[item["category"]]
+        return PLAIN_PROMPT.format(category=item["category"], call=item["call"] + 1,
+                                   subtopic=subtopics[item["call"] % len(subtopics)], style_rule=TERSE_RULE)
+    rule = TERSE_RULE if style == "terse" else DETAILED_RULE
     return WRITE_PROMPT.format(category=item["category"], call=item["call"] + 1,
                                shape=item["shape"], framing=item["framing"], style_rule=rule)
 
@@ -162,7 +232,7 @@ async def write_tasks(item: dict) -> list[dict] | None:
     for j, task in enumerate(tasks):
         if not _valid(task):
             continue
-        if style == "terse" and len(task["text"].split()) > MAX_TERSE_WORDS:
+        if style in ("terse", "plain") and len(task["text"].split()) > MAX_TERSE_WORDS:
             too_long += 1
             continue
         code = vc.extract_code(task["code"]).strip()
@@ -174,7 +244,7 @@ async def write_tasks(item: dict) -> list[dict] | None:
                          "tests": task["tests"], "category": item["category"], "author": item["author"],
                          "style": style})
     if too_long:
-        log.info("%s: dropped %d terse task(s) over %d words", item["id"], too_long, MAX_TERSE_WORDS)
+        log.info("%s: dropped %d %s task(s) over %d words", item["id"], too_long, style, MAX_TERSE_WORDS)
     return rows
 
 
