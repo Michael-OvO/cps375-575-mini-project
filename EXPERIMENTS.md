@@ -53,7 +53,11 @@ each backed by a v1 failure (map in `docs/superpowers/specs/2026-11-14-v2-design
   - IF rules placed before or inside the task.
 - Explorer proposals have been reviewed: accepted ones are in `data/discover/proposals_*.json`.
 - Probe pilot (2 cells per task, about $5 of Opus): every math and code probe verified, with a 24/24 teacher pass on each. The first IF pilot got 0/24 because English-word rules were combined with all-Japanese or all-Hindi answers. After the fix (`probes.english_only` / `valid_if_cell`), IF reached 20/24.
-- Round 1 is 206 cells. The full probe run is estimated at about $115 of Opus and has not been approved yet.
+- Round 1 is done: 2,529 probes over 212 cells, about $113 of Opus and under $2 on Tinker. Findings are in `reports/discovery_round1.md`. v1 on the probes: math 48%, code 57%, IF 29%.
+  - Code: 86% of failures fail a visible assert. Weakest: specs resolved only by the asserts, nested and date inputs, nested-list and dict outputs.
+  - Math: weakest on complex, base-n, degree and radical answers, and on counting techniques.
+  - IF: weakest at 4–5 rules and with rules placed before the task.
+- Next: add cell-targeted items to the v2 generators (see the action table in that report), then run the full v2 generation.
 
 **Self-distillation:** on hold. It was not shown to beat Opus data and the budget was questioned.
 Pilot data is in `data/sd_*`.
