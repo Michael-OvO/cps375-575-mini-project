@@ -384,3 +384,20 @@ def test_long_if_response_dropped_but_not_for_other_tasks(env):
     assert not any(d["id"] == "mn-big-t" for d in dropped)  # 950 words is under the 2,048 rule
     assert manifest["dropped_too_long"] >= 1 and manifest["dropped_too_long_response"] == 1
     assert IF_IDS[0] + "-long" not in {r["id"] for r in _rows(env)}
+
+
+def test_manifest_counts_math_verified(env):
+    math_new = jsonl.read(select.DATA / "math_new_solutions.jsonl")
+    for i, row in enumerate(math_new):
+        if i < 3:
+            row["verified"] = "single_solve"
+        elif i < 5:
+            row["verified"] = "tiebreak"
+    jsonl.write(select.DATA / "math_new_solutions.jsonl", math_new)
+    train = jsonl.read(select.DATA / "math_train_solutions.jsonl")
+    train[1]["verified"] = "known_answer"
+    jsonl.write(select.DATA / "math_train_solutions.jsonl", train)
+    manifest = build("t", {**SIZES, "math": 1000})
+    counts = manifest["math_verified"]
+    assert counts == {"known_answer": len(MATH_IDS), "single_solve": 3, "tiebreak": 2, "agreement": 25}
+    assert sum(counts.values()) == manifest["sources"][0]["count"] + manifest["sources"][1]["count"]

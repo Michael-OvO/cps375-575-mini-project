@@ -158,13 +158,22 @@ async def solve_known_one(item: dict, source: str) -> list[dict] | None:
     return []
 
 
-async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict] | None:
+async def solve_unknown(item: dict, teacher_names: list[str], solves: int = 2) -> list[dict] | None:
     """Solve a new problem. Two teachers agree -> accept. Otherwise a third, high-effort solve decides.
+
+    With solves=1 the problem gets a single solve that is accepted as is (verified "single_solve");
+    returns [] when it responded but did not parse, None when it gave no response.
 
     The two first solves run concurrently. Returns None (retry) when either of them raised, or when
     every solve call produced no response.
     """
     first, second = teacher_names[0], teacher_names[-1]
+    if solves == 1:
+        responded, solved_one = await _solve(item["problem"], first)
+        if solved_one:
+            row = _row(item, first, solved_one[0], solved_one[1], "math_new", solved_one[1])
+            return [dict(row, verified="single_solve")]
+        return [] if responded else None
     second_label = f"{second}-2" if second == first else second
     results = await asyncio.gather(_solve(item["problem"], first), _solve(item["problem"], second),
                                    return_exceptions=True)
@@ -178,7 +187,9 @@ async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict] | No
     solved = [(first, a), (second_label, b)]
     if a and b and await vm.equivalent(a[1], b[1]):
         target = a[1]
+        verified = "agreement"
     else:
+        verified = "tiebreak"
         rc, c = await _solve(item["problem"], first, effort="high")
         any_response = any_response or rc
         solved.append((f"{first}-tiebreak", c))
@@ -192,7 +203,7 @@ async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict] | No
     rows = []
     for name, sol in solved:
         if sol and await vm.equivalent(sol[1], target):
-            rows.append(_row(item, name, sol[0], target, "math_new", sol[1]))
+            rows.append(dict(_row(item, name, sol[0], target, "math_new", sol[1]), verified=verified))
     return rows
 
 
@@ -238,6 +249,8 @@ def main() -> None:
     p.add_argument("--calls", type=int, default=8000)
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
+    p.add_argument("--solves", type=int, choices=[1, 2], default=2,
+                   help="solve-new: independent solves per new problem (1 skips the agreement check)")
     args = p.parse_args()
     if args.command != "dev":
         teachers.check_configured(args.teachers)
@@ -263,7 +276,7 @@ def main() -> None:
             asyncio.run(run_many(items, write_problems, out, args.concurrency))
         else:
             items = jsonl.read(NEW_PROBLEMS)[: args.limit]
-            fn = lambda it: solve_unknown(it, args.teachers)  # noqa: E731
+            fn = lambda it: solve_unknown(it, args.teachers, args.solves)  # noqa: E731
             asyncio.run(run_many(items, fn, out, args.concurrency))
     finally:
         teachers.write_usage(out)

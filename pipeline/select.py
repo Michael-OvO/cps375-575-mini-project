@@ -226,6 +226,7 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
     dev_filter = load_dev_filter(missing_dev)
     count = _token_counter()
     kept, per_source, teachers = [], {}, set()
+    math_verified: dict[str, int] = {}
     kept_per_task = dict.fromkeys(TASKS, 0)
     dropped_rows: list[dict] = []
     dropped_by_task = {t: dict.fromkeys(DROP_REASONS, 0) for t in TASKS}
@@ -271,6 +272,9 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
             kept.append(ex)
             kept_per_task[task] += 1
             source = source_of(row)
+            if task == "math":
+                kind = row.get("verified") or ("known_answer" if source == "math_train" else "agreement")
+                math_verified[kind] = math_verified.get(kind, 0) + 1
             per_source[source] = per_source.get(source, 0) + 1
             if row.get("teacher"):
                 teachers.add(row["teacher"])
@@ -309,6 +313,7 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
         "dropped_invalid": total("invalid"), "dropped_dev_overlap": total("dev_overlap"),
         "dropped_dev_member": total("dev_member"), "dropped_duplicate": total("duplicate"),
         "dropped_by_task": dropped_by_task,
+        "math_verified": math_verified,
         "overlap_filter_enabled": overlap is not None,
         "no_overlap_check_acknowledged": bool(no_overlap_check_ok),
         "dev_overlap_filter_enabled": dev_filter is not None,

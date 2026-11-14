@@ -319,3 +319,74 @@ def test_solve_unknown_single_teacher_separate_calls_and_tiebreak(monkeypatch):
     replies = iter(["a b c d e f g h i j\nANSWER: 4", "e f g h i j k l m n\nANSWER: 4"])
     rows = asyncio.run(gm.solve_unknown(item, ["claude"]))
     assert {r["teacher"] for r in rows} == {"claude", "claude-2"}
+
+
+def test_solve_unknown_single_solve_modes(monkeypatch):
+    item = {"id": "mn-0-0", "problem": "?", "level": 3, "subject": "Algebra"}
+    calls = []
+
+    def stub(reply):
+        async def f(prompt, **kw):
+            calls.append(kw.get("effort", "medium"))
+            return reply
+        return f
+
+    monkeypatch.setattr(gm.teachers, "get", lambda name: stub("We add them up.\nANSWER: $\\dfrac12$"))
+    rows = asyncio.run(gm.solve_unknown(item, ["claude", "gpt"], solves=1))
+    assert calls == ["medium"] and len(rows) == 1
+    assert rows[0]["teacher"] == "claude" and rows[0]["id"] == "mn-0-0-claude"
+    assert rows[0]["target"] == rows[0]["answer"] == "\\dfrac12"
+    assert rows[0]["verified"] == "single_solve" and rows[0]["source"] == "math_new"
+    monkeypatch.setattr(gm.teachers, "get", lambda name: stub("no answer line here at all"))
+    assert asyncio.run(gm.solve_unknown(item, ["claude"], solves=1)) == []
+    monkeypatch.setattr(gm.teachers, "get", lambda name: stub(None))
+    assert asyncio.run(gm.solve_unknown(item, ["claude"], solves=1)) is None
+
+    async def boom(prompt, **kw):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(gm.teachers, "get", lambda name: boom)
+    import pytest
+    with pytest.raises(RuntimeError):
+        asyncio.run(gm.solve_unknown(item, ["claude"], solves=1))
+
+
+def test_solve_unknown_two_solves_marks_agreement_and_tiebreak(monkeypatch):
+    item = {"id": "mn-0-0", "problem": "?", "level": 3, "subject": "Algebra"}
+    replies = iter(["a b c d e f g h i j\nANSWER: 4", "e f g h i j k l m n\nANSWER: 4"])
+
+    async def agree(prompt, **kw):
+        return next(replies)
+
+    monkeypatch.setattr(gm.teachers, "get", lambda name: agree)
+    rows = asyncio.run(gm.solve_unknown(item, ["claude"]))
+    assert {r["verified"] for r in rows} == {"agreement"}
+    replies = iter(["a b c d e f g h i j\nANSWER: 7", "e f g h i j k l m n\nANSWER: 8",
+                    "o p q r s t u v w x\nANSWER: 8"])
+    rows = asyncio.run(gm.solve_unknown(item, ["claude"], solves=2))
+    assert rows and {r["verified"] for r in rows} == {"tiebreak"}
+
+
+def test_solve_new_cli_passes_solves(monkeypatch):
+    import sys
+    seen = {}
+
+    async def fake_run_many(items, fn, out, concurrency=16):
+        seen["fn"] = fn
+
+    for args, expected in (([], 2), (["--solves", "1"], 1)):
+        monkeypatch.setattr(gm, "run_many", fake_run_many)
+        monkeypatch.setattr(gm, "load_train", lambda: [])
+        monkeypatch.setattr(gm.teachers, "check_configured", lambda names: None)
+        monkeypatch.setattr(gm.teachers, "write_usage", lambda out: None)
+        monkeypatch.setattr(gm.jsonl, "read", lambda p: [{"id": "mn-0-0", "problem": "?", "level": 1, "subject": "A"}])
+        got = []
+
+        async def fake_solve(item, names, solves=2):
+            got.append(solves)
+
+        monkeypatch.setattr(gm, "solve_unknown", fake_solve)
+        monkeypatch.setattr(sys, "argv", ["math", "solve-new", *args])
+        gm.main()
+        asyncio.run(seen["fn"]({"id": "x"}))
+        assert got == [expected]
