@@ -32,6 +32,7 @@ from pipeline.verify import math as vm
 MATH_LONG = DATA / "v2_math_long.jsonl"
 CODE_PLAN = DATA / "v2_code_plan.jsonl"
 IF_COUNT = DATA / "v2_if_count.jsonl"
+IF_NEW = DATA / "v2_if_new.jsonl"
 
 MATH_LONG_PROMPT = """Solve the following competition math problem.
 
@@ -152,6 +153,11 @@ def code_plan_items(limit: int | None) -> list[dict]:
     return [dict(t, v1_correct=t in weak_rest, teacher="claude") for t in failed + weak_rest][:limit]
 
 
+def normalize_plan(plan: str) -> str:
+    """One plan format for every example: drop list numbering and a leading "Plan:" label."""
+    return re.sub(r"^\s*(?:1\.\s*)?(?:\**plan\**:\**\s*)?", "", plan.strip(), flags=re.IGNORECASE).strip()
+
+
 async def code_plan(item: dict) -> list[dict] | None:
     prompt = CODE_PLAN_PROMPT.format(tests="\n".join(item["tests"]), text=item["text"])
     text = await teachers.get("claude")(prompt, effort="medium")
@@ -160,9 +166,10 @@ async def code_plan(item: dict) -> list[dict] | None:
     text = text.strip()
     if len(_FENCE.findall(text)) != 1 or not text.endswith("```"):
         return []
-    plan = text.split("```python")[0].strip()
+    plan = normalize_plan(text.split("```python")[0])
     if not (5 <= len(plan.split()) <= 160) or "`" in plan:
         return []
+    text = plan + "\n\n```python" + text.split("```python", 1)[1]
     tests = item["tests"] + item.get("hidden_tests", [])
     if not await asyncio.to_thread(vc.run_tests, vc.extract_code(text), tests, timeout=10.0):
         return []
@@ -223,17 +230,50 @@ async def if_count(item: dict) -> list[dict] | None:
     return [] if got else None
 
 
+# ---------------------------------------------------------------- if-new
+
+def if_new_items(limit: int | None, skip: int = 6000) -> list[dict]:
+    """Unused base tasks after if-count's share, each with one of the new (v2) training constraint types.
+
+    Failure I4: held-out types did not improve with more examples of the same types, so v2 adds breadth.
+    """
+    from pipeline.constraints import extra
+    new_train = sorted(i for i, e in extra.REGISTRY.items() if i not in extra.V1_IDS and not e.dev_only)
+    items = []
+    for it in if_items()[skip:]:
+        rng = random.Random(f"ifn-{it['id']}")
+        first = _build(rng.choice(new_train), rng, it["task"])
+        from pipeline.constraints.sample import groups_of
+        taken = groups_of(first["id"])
+        rest = [c for c in sample_constraints(rng, it["task"], mode="train")
+                if not (groups_of(c["id"]) & taken) and group_of(c["id"]) != "wrap"
+                and not (c["id"] == "x:exact_words" and c["kwargs"]["n"] > EXACT_WORDS_MAX)]
+        cons = [first] + rest[: rng.choice([0, 1, 1, 2])]
+        rng.shuffle(cons)
+        items.append({"id": f"ifn-{it['id'][3:]}", "task": it["task"], "prompt": render_prompt(it["task"], cons),
+                      "constraints": [{"id": c["id"], "kwargs": c["kwargs"]} for c in cons], "teacher": "claude"})
+    return items[:limit]
+
+
+async def if_new(item: dict) -> list[dict] | None:
+    rows = await if_count(item)
+    if rows:
+        rows[0]["style"] = "new_types"
+    return rows
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["math-long", "code-plan", "if-count"])
+    p.add_argument("command", choices=["math-long", "code-plan", "if-count", "if-new"])
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
     args = p.parse_args()
     teachers.check_configured(["claude"])
     plan = {"math-long": (math_long_items, math_long, MATH_LONG),
             "code-plan": (code_plan_items, code_plan, CODE_PLAN),
-            "if-count": (if_count_items, if_count, IF_COUNT)}[args.command]
+            "if-count": (if_count_items, if_count, IF_COUNT),
+            "if-new": (if_new_items, if_new, IF_NEW)}[args.command]
     items_fn, fn, out = plan
     try:
         asyncio.run(run_many(items_fn(args.limit), fn, out, args.concurrency))
