@@ -215,8 +215,11 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
                  lambda r: r["source"]),
         "code": (code_pool, lambda r: code_example(r, rng), lambda r: r["text"], lambda r: r["text"],
                  lambda r: "code"),
-        # Dev overlap uses the base task (no constraint boilerplate); rows without one skip that check.
-        "ifeval": (if_pool, if_example, lambda r: r["prompt"], lambda r: r.get("task"),
+        # Both overlap checks use the base task: the constraint wording is the checker library's own
+        # template text, shared with every IFEval prompt of that type, and flagged ~8% of candidates
+        # as false positives (smoke run, 2026-11-14). Rows without a base task fall back to the prompt
+        # for the test-set check and skip the dev check.
+        "ifeval": (if_pool, if_example, lambda r: r.get("task") or r["prompt"], lambda r: r.get("task"),
                    lambda r: "instruction_following"),
         "general": (general_pool, general_example, _user_text, lambda r: None, lambda r: "general"),
     }

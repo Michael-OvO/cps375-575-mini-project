@@ -169,6 +169,25 @@ def test_build_drops_overlap_on_raw_text(env, monkeypatch):
     assert sum(r["task"] == "instruction_following" for r in _rows(env)) == 5
 
 
+def test_if_overlap_checks_base_task_not_constraint_wording(env, monkeypatch):
+    # The constraint text matches a test prompt verbatim, but the base tasks are our own: keep all.
+    boiler = "first repeat the request word for word without change then give your answer"
+    test_item = f"Is ballistics an actual science? {boiler}"
+    leaky_task = "the secret held out test item about purple elephants dancing"
+    rows = [{"id": iid, "task": f"Write about topic {i} in detail.",
+             "prompt": f"Write about topic {i} in detail. {boiler}", "constraints": [],
+             "response": "ok " * 20, "teacher": "claude"} for i, iid in enumerate(IF_IDS[1:6])]
+    rows.append({"id": IF_IDS[0], "task": leaky_task, "prompt": f"{leaky_task} {boiler}",
+                 "constraints": [], "response": "ok " * 20, "teacher": "claude"})
+    jsonl.write(select.DATA / "if_responses.jsonl", rows)
+    monkeypatch.setattr(leakage, "load_overlap_filter",
+                        lambda: leakage.OverlapFilter([test_item, leaky_task]))
+    manifest = build("t", {**SIZES, "ifeval": 100})
+    assert manifest["dropped_overlap"] == 1
+    assert IF_IDS[0] not in {r["id"] for r in _rows(env)}
+    assert sum(r["task"] == "instruction_following" for r in _rows(env)) == 5
+
+
 def _general(i, messages):
     return {"id": f"gen-bad-{i}", "source": "tulu-3:x", "messages": messages}
 
