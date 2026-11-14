@@ -3,11 +3,13 @@
 Usage:
     python -m pipeline.select --name v1 --math 30000 --ifeval 6000 --code 6000 --general 2000
     python -m pipeline.select --name smoke --math 500 --ifeval 200 --code 200 --general 100
+    python -m pipeline.select --name v2 --v2 --ifeval 8000 --code 7000   # adds the v2 pools (see build)
 """
 
 import argparse
 import json
 import random
+import re
 
 from pipeline import formats, jsonl, leakage
 from pipeline.config import DATA, MAX_TRAIN_TOKENS, RUNS, SEED, STUDENT, is_dev
@@ -18,6 +20,8 @@ from pipeline.teachers import has_control_chars
 MAX_IF_RESPONSE_TOKENS = 900  # assistant text of instruction-following examples (evaluation caps output at 1,024)
 MIN_SOLUTION_CHARS = 30  # non-whitespace characters in the solution body
 LEVEL_WEIGHT = {1: 1.0, 2: 1.0, 3: 1.5, 4: 2.0, 5: 2.5}
+# Answers that give up or name a choice letter: ill-posed problems (v1 error analysis found 6 among teacher problems).
+GIVE_UP = re.compile(r"(?i)no (real )?solution|no such|does not exist|cannot be determined|^\(?[A-E]\)?$")
 TRAIN_PRICE_PER_M = 1.463
 
 
@@ -65,6 +69,15 @@ def pick_math(train_rows: list[dict], new_rows: list[dict], n: int, rng: random.
     return math_candidates(train_rows, new_rows, rng)[:n]
 
 
+def math_candidates_v2(train_rows, new_rows, long_rows, cell_rows, rng) -> list[dict]:
+    """v2 order: long solutions and cell-targeted problems first; a problem with a long solution loses its short one."""
+    first = [r for r in long_rows + cell_rows if len("".join(r["solution"].split())) >= MIN_SOLUTION_CHARS]
+    rng.shuffle(first)
+    taken = {r["pid"] for r in first}
+    rest = [r for r in math_candidates(train_rows, new_rows, rng) if r["pid"] not in taken]
+    return [r for r in first + rest if not GIVE_UP.search(str(r.get("answer") or r["target"]).strip())]
+
+
 def math_example(row: dict, rng: random.Random) -> dict:
     prompt = formats.math_prompt(row["problem"], rng)
     return {"id": row["id"], "task": "math",
@@ -73,8 +86,9 @@ def math_example(row: dict, rng: random.Random) -> dict:
 
 def code_example(row: dict, rng: random.Random) -> dict:
     prompt = formats.code_prompt(row["text"], row["tests"], rng)
-    return {"id": row["id"], "task": "code",
-            "messages": formats.to_messages(prompt, formats.code_target(row["code"]))}
+    # v2 plan-first rows carry the whole answer (plan, then one code block)
+    target = row["response"] if "response" in row else formats.code_target(row["code"])
+    return {"id": row["id"], "task": "code", "messages": formats.to_messages(prompt, target)}
 
 
 def if_example(row: dict) -> dict:
@@ -162,7 +176,7 @@ def _token_counter():
     return count
 
 
-MATH_SOURCES = ("math_train", "math_new")
+MATH_SOURCES = ("math_train", "math_new", "v2_cells")
 TASKS = ("math", "code", "ifeval", "general")
 # Per-example task label written to train.jsonl and dropped.jsonl, by TASKS key.
 TASK_LABEL = {"math": "math", "code": "code", "ifeval": "instruction_following", "general": "general"}
@@ -188,7 +202,10 @@ def _check_counts(sources: list[dict], kept: list[dict]) -> None:
         raise ValueError(f"manifest source counts ({total}) do not match kept examples ({len(kept)})")
 
 
-def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
+def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = False) -> dict:
+    """v2=True adds the v2 pools ahead of the v1 ones: long math solutions replace short ones on the same
+    problem, plan-first code answers replace direct ones on the same task, and the cell-targeted and new IF
+    items come first. Sizes still cap each task."""
     rng = random.Random(SEED)
     dupes = {t: [] for t in TASKS}
     missing_pools: list[str] = []
@@ -202,7 +219,21 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
     for pool in (code_pool, if_pool, general_pool):
         rng.shuffle(pool)
 
-    math_pool = math_candidates(math_train, math_new, rng)
+    if v2:
+        math_pool = math_candidates_v2(math_train, math_new, _read_pool("v2_math_long.jsonl", dupes["math"], missing_pools),
+                                       _read_pool("v2_math_cells.jsonl", dupes["math"], missing_pools), rng)
+        plans_ = _read_pool("v2_code_plan.jsonl", dupes["code"], missing_pools)
+        cells_ = _read_pool("v2_code_cells.jsonl", dupes["code"], missing_pools)
+        first = plans_ + cells_
+        rng.shuffle(first)
+        planned = {r["task_id"] for r in plans_}
+        code_pool = first + [r for r in code_pool if r["id"] not in planned]
+        new_if = (_read_pool("v2_if_count.jsonl", dupes["ifeval"], missing_pools)
+                  + _read_pool("v2_if_new.jsonl", dupes["ifeval"], missing_pools))
+        rng.shuffle(new_if)
+        if_pool = new_if + if_pool
+    else:
+        math_pool = math_candidates(math_train, math_new, rng)
     for row in math_pool:
         if row.get("source") not in MATH_SOURCES:
             raise ValueError(f"math row {row['id']!r} has unexpected source {row.get('source')!r}")
@@ -291,6 +322,8 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False) -> dict:
          "count": per_source.get("math_train", 0)},
         {"name": "math_new", "dataset": "teacher-generated", "split": "generated",
          "count": per_source.get("math_new", 0)},
+        {"name": "math_cells", "dataset": "teacher-generated", "split": "generated",
+         "count": per_source.get("v2_cells", 0)},
         {"name": "code", "dataset": "teacher-generated", "split": "generated",
          "count": per_source.get("code", 0)},
         {"name": "instruction_following", "dataset": "teacher-generated", "split": "generated",
@@ -344,13 +377,14 @@ def main() -> None:
     p.add_argument("--ifeval", type=int, default=6000)
     p.add_argument("--code", type=int, default=6000)
     p.add_argument("--general", type=int, default=2000)
+    p.add_argument("--v2", action="store_true", help="add the v2 pools (long math, plan code, cells, new IF)")
     p.add_argument("--no-overlap-check-ok", action="store_true",
                    help="a human has decided to use teacher-written math/code without the test-set overlap filter")
     args = p.parse_args()
     try:
         manifest = build(args.name, {"math": args.math, "ifeval": args.ifeval,
                                      "code": args.code, "general": args.general},
-                         no_overlap_check_ok=args.no_overlap_check_ok)
+                         no_overlap_check_ok=args.no_overlap_check_ok, v2=args.v2)
     except OverlapCheckNotDecided as exc:
         raise SystemExit(f"ERROR: {exc}") from None
     print(json.dumps(manifest, indent=2))

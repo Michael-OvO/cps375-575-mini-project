@@ -420,3 +420,28 @@ def test_manifest_counts_math_verified(env):
     counts = manifest["math_verified"]
     assert counts == {"known_answer": len(MATH_IDS), "single_solve": 3, "tiebreak": 2, "agreement": 25}
     assert sum(counts.values()) == manifest["sources"][0]["count"] + manifest["sources"][1]["count"]
+
+
+def test_v2_long_solution_replaces_short_and_drops_give_up():
+    import random
+    from pipeline.select import math_candidates_v2
+    short = [{"id": "a-s", "pid": "a", "problem": "p", "solution": "x" * 40, "target": "3", "level": 5, "source": "math_new"},
+             {"id": "b-s", "pid": "b", "problem": "q", "solution": "y" * 40, "target": "No such n", "level": 3, "source": "math_new"},
+             {"id": "c-s", "pid": "c", "problem": "r", "solution": "z" * 40, "target": "7", "level": 3, "source": "math_new"}]
+    long = [{"id": "a-long", "pid": "a", "problem": "p", "solution": "w" * 400, "target": "3", "answer": "3", "level": 5,
+             "source": "math_new"}]
+    cells = [{"id": "mc-0-1-long", "pid": "mc-0-1", "problem": "s", "solution": "v" * 400, "target": "2", "answer": "2",
+              "level": 4, "source": "v2_cells"}]
+    out = math_candidates_v2([], short, long, cells, random.Random(0))
+    ids = [r["id"] for r in out]
+    assert set(ids[:2]) == {"a-long", "mc-0-1-long"}  # v2 rows first
+    assert "a-s" not in ids and "b-s" not in ids and "c-s" in ids
+
+
+def test_v2_code_plan_row_keeps_full_response():
+    import random
+    from pipeline.select import code_example
+    row = {"id": "t-plan", "text": "Write f.", "tests": ["assert f() == 1"],
+           "response": "Return 1.\n\n```python\ndef f():\n    return 1\n```"}
+    ex = code_example(row, random.Random(0))
+    assert ex["messages"][1]["content"] == row["response"]
