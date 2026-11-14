@@ -127,3 +127,46 @@ def test_add_hidden_single_teacher_prompt_has_no_solution(monkeypatch, caplog):
     assert "return n * 2" not in seen[0] and "def double(n):" in seen[0]  # signature only, no body
     assert TASK["text"] in seen[0] and TASK["tests"][0] in seen[0]
     assert not caplog.records
+
+
+def _terse_item():
+    return dict(_item(), style="terse")
+
+
+def _detailed_item():
+    return dict(_item(), style="detailed")
+
+
+def test_style_split_is_deterministic_and_mixed():
+    items = gc.write_items(["claude", "gpt"], 40)
+    again = gc.write_items(["claude", "gpt"], 40)
+    assert [it["style"] for it in items] == [it["style"] for it in again]
+    share = sum(it["style"] == "terse" for it in items) / len(items)
+    assert 0.6 <= share <= 0.8
+    assert {it["style"] for it in items[:40]} == {"terse", "detailed"}
+
+
+def test_prompt_style_instructions():
+    terse = gc.write_prompt(_terse_item())
+    detailed = gc.write_prompt(_detailed_item())
+    assert "at most 15 words" in terse and "Leave the details to the tests" in terse
+    assert "15 words" not in detailed and "at most" not in detailed
+    for text in (terse, detailed):
+        assert "most common textbook exercises" in text and "exactly 3 assert statements" in text
+
+
+def test_terse_length_enforced_and_style_stored(monkeypatch, caplog):
+    long = dict(TASK, text=" ".join(["word"] * 25))
+    short = dict(TASK, text=" ".join(["word"] * 12))
+
+    async def fake(prompt, **kw):
+        return json.dumps([long, short])
+
+    monkeypatch.setattr(gc.teachers, "get", lambda name: fake)
+    with caplog.at_level("INFO"):
+        rows = asyncio.run(gc.write_tasks(_terse_item()))
+    assert [r["id"] for r in rows] == ["ct-0-1"] and rows[0]["style"] == "terse"
+    assert rows[0]["text"] == short["text"]
+    assert "dropped 1 terse" in caplog.text
+    rows = asyncio.run(gc.write_tasks(_detailed_item()))
+    assert len(rows) == 2 and all(r["style"] == "detailed" for r in rows)

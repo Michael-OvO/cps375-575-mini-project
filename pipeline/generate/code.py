@@ -7,6 +7,7 @@ Usage:
 
 import argparse
 import asyncio
+import hashlib
 import logging
 import re
 
@@ -14,6 +15,8 @@ from pipeline import jsonl, teachers
 from pipeline.config import DATA
 from pipeline.teachers.runner import run_many
 from pipeline.verify import code as vc
+
+log = logging.getLogger(__name__)
 
 RAW = DATA / "code_tasks_raw.jsonl"
 TASKS = DATA / "code_tasks.jsonl"
@@ -59,14 +62,25 @@ the tasks around {framing}.
 Requirements:
 - Difficulty: entry-level to intermediate; solvable in under 20 lines.
 - Standard library only. No input(), no printing, no files, no randomness, no network.
-- The description must be short and natural, like a textbook exercise. It does not name the \
-function or its parameters: those are fixed by the tests.
+{style_rule}
 - Avoid the most common textbook exercises for this category (the first few anyone would think \
 of); write less obvious tasks instead.
 - The asserts must be deterministic and compare with ==.
 - Make the 5 tasks clearly different from each other.
 
 Return only a JSON array of 5 objects with keys "text", "code" and "tests" (a list of 3 strings)."""
+
+DETAILED_RULE = """- The description must be short and natural, like a textbook exercise. It does not name the \
+function or its parameters: those are fixed by the tests."""
+
+TERSE_RULE = """- Each description is a single sentence of at most 15 words that names what to compute and \
+nothing else: no edge-case clauses, no input-format details, no "returning X for Y" clauses. Leave \
+the details to the tests: the 3 asserts must carry them, and at least one should exercise an edge \
+case (such as an empty or single-element input) where that makes sense. The description does not \
+name the function or its parameters: those are fixed by the tests."""
+
+TERSE_FRACTION = 0.7
+MAX_TERSE_WORDS = 18  # the prompt asks for 15; small tolerance
 
 HIDDEN_PROMPT = """A Python function is described as follows:
 
@@ -80,7 +94,8 @@ These example tests show how it is called:
 
 Write 5 additional assert statements that a correct implementation must pass. Cover edge cases the \
 examples do not. Use only what the description and examples make unambiguous: do not test \
-behaviour the description leaves open. Each assert must compare with ==.
+behaviour the description leaves open. Where the description is brief, the example tests define the \
+intended behaviour. Each assert must compare with ==.
 
 Return only a JSON array of 5 strings."""
 
@@ -112,16 +127,23 @@ def _valid(task) -> bool:
     )
 
 
+def style_of(call_id: str) -> str:
+    """Deterministic per-call description style: ~70% terse, ~30% detailed."""
+    bucket = int(hashlib.md5(call_id.encode()).hexdigest(), 16) % 1000
+    return "terse" if bucket < TERSE_FRACTION * 1000 else "detailed"
+
+
 def write_prompt(item: dict) -> str:
+    rule = TERSE_RULE if item.get("style") == "terse" else DETAILED_RULE
     return WRITE_PROMPT.format(category=item["category"], call=item["call"] + 1,
-                               shape=item["shape"], framing=item["framing"])
+                               shape=item["shape"], framing=item["framing"], style_rule=rule)
 
 
 def write_items(teacher_names: list[str], calls_per_category: int) -> list[dict]:
     """One item per (category, call), interleaved across categories so a --limit pilot covers many."""
     return [
         {"id": f"ct-{ci}-{k}", "category": cat, "author": teacher_names[(ci + k) % len(teacher_names)],
-         "call": k, "shape": SHAPES[k % len(SHAPES)],
+         "call": k, "style": style_of(f"ct-{ci}-{k}"), "shape": SHAPES[k % len(SHAPES)],
          "framing": FRAMINGS[(k // len(SHAPES) + ci) % len(FRAMINGS)]}
         for k in range(calls_per_category) for ci, cat in enumerate(CATEGORIES)
     ]
@@ -135,8 +157,13 @@ async def write_tasks(item: dict) -> list[dict] | None:
     if not isinstance(tasks, list):
         return []
     rows = []
+    too_long = 0
+    style = item.get("style", "detailed")
     for j, task in enumerate(tasks):
         if not _valid(task):
+            continue
+        if style == "terse" and len(task["text"].split()) > MAX_TERSE_WORDS:
+            too_long += 1
             continue
         code = vc.extract_code(task["code"]).strip()
         name = function_name(code)
@@ -144,7 +171,10 @@ async def write_tasks(item: dict) -> list[dict] | None:
             continue  # an assert that never calls the function tests nothing
         if await asyncio.to_thread(vc.run_tests, code, task["tests"]):
             rows.append({"id": f"{item['id']}-{j}", "text": task["text"].strip(), "code": code,
-                         "tests": task["tests"], "category": item["category"], "author": item["author"]})
+                         "tests": task["tests"], "category": item["category"], "author": item["author"],
+                         "style": style})
+    if too_long:
+        log.info("%s: dropped %d terse task(s) over %d words", item["id"], too_long, MAX_TERSE_WORDS)
     return rows
 
 
