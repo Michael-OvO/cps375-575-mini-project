@@ -51,7 +51,9 @@ each backed by a v1 failure (map in `docs/superpowers/specs/2026-11-14-v2-design
   - HumanEval-style and long-spec prompts;
   - 6 IF genres;
   - IF rules placed before or inside the task.
-- Explorer proposals have been reviewed: accepted ones are in `data/discover/proposals_*.json`. The probe pilot is running.
+- Explorer proposals have been reviewed: accepted ones are in `data/discover/proposals_*.json`.
+- Probe pilot (2 cells per task, about $5 of Opus): every math and code probe verified, with a 24/24 teacher pass on each. The first IF pilot got 0/24 because English-word rules were combined with all-Japanese or all-Hindi answers. After the fix (`probes.english_only` / `valid_if_cell`), IF reached 20/24.
+- Round 1 is 206 cells. The full probe run is estimated at about $115 of Opus and has not been approved yet.
 
 **Self-distillation:** on hold. It was not shown to beat Opus data and the budget was questioned.
 Pilot data is in `data/sd_*`.
