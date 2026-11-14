@@ -16,6 +16,7 @@ from datasets import load_dataset
 
 from pipeline import jsonl, teachers
 from pipeline.config import DATA, SEED, is_dev, is_vault
+from pipeline.teachers import TeacherUnavailable
 from pipeline.teachers.runner import run_many
 from pipeline.verify import math as vm
 
@@ -163,8 +164,11 @@ async def solve_unknown(item: dict, teacher_names: list[str]) -> list[dict] | No
     second_label = f"{second}-2" if second == first else second
     results = await asyncio.gather(_solve(item["problem"], first), _solve(item["problem"], second),
                                    return_exceptions=True)
-    if any(isinstance(r, BaseException) for r in results):
-        return None  # retry on rerun; never pay for a tie-break without both first solves
+    errors = [r for r in results if isinstance(r, BaseException)]
+    if errors:
+        # Never pay for a tie-break without both first solves; let the runner see the failure
+        # (TeacherUnavailable trips its circuit breaker, anything else counts as an item failure).
+        raise next((e for e in errors if isinstance(e, TeacherUnavailable)), errors[0])
     (ra, a), (rb, b) = results
     any_response = ra or rb
     solved = [(first, a), (second_label, b)]

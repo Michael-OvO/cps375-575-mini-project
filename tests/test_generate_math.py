@@ -160,8 +160,63 @@ def test_solve_unknown_retries_without_tiebreak_when_a_first_solve_raises(monkey
 
     monkeypatch.setattr(gm.teachers, "get", fake_get)
     item = {"id": "mn-0-0", "problem": "?", "level": 3, "subject": "Algebra"}
-    assert asyncio.run(gm.solve_unknown(item, ["claude", "gpt"])) is None
+    import pytest
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(gm.solve_unknown(item, ["claude", "gpt"]))
     assert sorted(calls) == [("claude", "medium"), ("gpt", "medium")]  # no high-effort tie-break
+
+
+def test_solve_unknown_reraises_unavailable_in_preference(monkeypatch):
+    import pytest
+    from pipeline.teachers import TeacherUnavailable
+
+    def fake_get(name):
+        async def fn(prompt, **kw):
+            raise RuntimeError("other") if name == "claude" else TeacherUnavailable("429")
+        return fn
+
+    monkeypatch.setattr(gm.teachers, "get", fake_get)
+    item = {"id": "mn-0-0", "problem": "?", "level": 3, "subject": "Algebra"}
+    with pytest.raises(TeacherUnavailable):
+        asyncio.run(gm.solve_unknown(item, ["claude", "gpt"]))
+
+
+def _new_items(n):
+    return [{"id": f"mn-{i}", "problem": "?", "level": 3, "subject": "Algebra"} for i in range(n)]
+
+
+def test_run_many_solve_new_unavailable_stops_run(monkeypatch, tmp_path):
+    from pipeline import jsonl
+    from pipeline.teachers import TeacherUnavailable, runner
+    calls = []
+
+    def fake_get(name):
+        async def fn(prompt, **kw):
+            calls.append(prompt)
+            raise TeacherUnavailable("usage limit reached")
+        return fn
+
+    monkeypatch.setattr(gm.teachers, "get", fake_get)
+    out = tmp_path / "o.jsonl"
+    asyncio.run(runner.run_many(_new_items(10), lambda it: gm.solve_unknown(it, ["claude"]), out, concurrency=1))
+    assert len(calls) == 2  # only the first item's two first solves ran
+    assert jsonl.done_ids(out) == set()
+
+
+def test_run_many_solve_new_ordinary_errors_trip_breaker(monkeypatch, tmp_path):
+    from pipeline.teachers import TeacherError, runner
+    calls = []
+
+    def fake_get(name):
+        async def fn(prompt, **kw):
+            calls.append(prompt)
+            raise TeacherError("bad")
+        return fn
+
+    monkeypatch.setattr(gm.teachers, "get", fake_get)
+    out = tmp_path / "o.jsonl"
+    asyncio.run(runner.run_many(_new_items(40), lambda it: gm.solve_unknown(it, ["claude"]), out, concurrency=1))
+    assert len(calls) == 50  # 25 items x 2 first solves, then the breaker stopped the run
 
 
 def test_split_solution_cleans_answer():
@@ -184,11 +239,11 @@ def test_write_problems_rejects_tabs(monkeypatch):
     assert [r["problem"] for r in rows] == ["Find y if y + 1 = 4 and y is real."]
 
 
-def test_claude_only_defaults_and_single_teacher_solve_train():
+def test_claude_only_defaults_and_single_teacher_solve_train(monkeypatch):
     import sys
     from pipeline.generate import code as gc, ifeval as gi
     for mod in (gm, gc, gi):
-        sys.argv = [mod.__name__, {gm: "dev", gc: "write", gi: "base"}[mod]]
+        monkeypatch.setattr(sys, "argv", [mod.__name__, {gm: "dev", gc: "write", gi: "base"}[mod]])
         import argparse
         captured = {}
         orig = argparse.ArgumentParser.parse_args

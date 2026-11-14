@@ -199,7 +199,8 @@ def test_claude_and_gpt_record_usage_and_served_model(monkeypatch):
     assert snap["claude_api"] == {"calls": 2, "input_tokens": 20, "output_tokens": 40,
                               "models": {"claude-fable-5-2": 2}}
     assert snap["gpt"] == {"calls": 1, "input_tokens": 3, "output_tokens": 4, "models": {"gpt-served-id": 1}}
-    assert "claude" not in snap or "cost_usd" in snap["claude"]  # "claude" is the CLI backend now
+    assert set(snap) == {"claude_api", "gpt"} | ({"claude"} if "claude" in snap else set())
+    assert "cost_usd" not in snap["claude_api"] and "cost_usd" not in snap["gpt"]
 
 
 def test_record_usage_tolerates_missing_usage():
@@ -302,4 +303,26 @@ def test_run_many_success_resets_failure_counter(tmp_path):
 
     items = [{"id": str(i)} for i in range(100)]
     asyncio.run(runner.run_many(items, fn, out, concurrency=1))
+    assert len(jsonl.done_ids(out)) == 4  # ran to completion
+
+
+def test_run_many_none_results_count_as_failures(tmp_path):
+    out = tmp_path / "o.jsonl"
+    started = []
+
+    async def fn(item):
+        started.append(item["id"])
+        return None
+
+    asyncio.run(runner.run_many([{"id": str(i)} for i in range(40)], fn, out, concurrency=1))
+    assert len(started) == 25 and jsonl.done_ids(out) == set()
+
+
+def test_run_many_list_result_resets_none_counter(tmp_path):
+    out = tmp_path / "o.jsonl"
+
+    async def fn(item):
+        return [] if int(item["id"]) % 25 == 24 else None
+
+    asyncio.run(runner.run_many([{"id": str(i)} for i in range(100)], fn, out, concurrency=1))
     assert len(jsonl.done_ids(out)) == 4  # ran to completion

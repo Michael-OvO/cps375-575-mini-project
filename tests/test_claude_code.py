@@ -39,7 +39,7 @@ def good(result="hello", **over):
 @pytest.fixture
 def cli(monkeypatch):
     state = {"proc": None, "argv": None, "kwargs": None}
-    monkeypatch.setattr(claude_code, "USAGE", {**teachers.new_usage(), "cost_usd": 0.0})
+    monkeypatch.setattr(claude_code, "USAGE", {**teachers.new_usage(), "cost_usd": 0.0, "failed_calls": 0})
 
     def install(proc):
         async def fake_exec(*argv, **kwargs):
@@ -62,7 +62,7 @@ def test_success_records_usage_cost_and_model(cli):
     run(cli, FakeProc(good()), "p")
     snap = teachers.usage_snapshot()["claude"]
     assert snap == {"calls": 2, "input_tokens": 20, "output_tokens": 40, "cost_usd": 0.25,
-                    "models": {"claude-fable-5-2": 2}}
+                    "failed_calls": 0, "models": {"claude-fable-5-2": 2}}
 
 
 def test_argv_stdin_and_cwd(cli):
@@ -121,3 +121,82 @@ def test_timeout_kills_process(cli):
     with pytest.raises(teachers.TeacherError, match="timed out"):
         run(cli, proc, "p", timeout=0.05)
     assert proc.killed
+
+
+def test_env_strips_api_credentials(cli, monkeypatch):
+    for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_PROFILE"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setenv("HOME", "/home/someone")
+    run(cli, FakeProc(good()), "p")
+    env = cli["kwargs"]["env"]
+    assert not any(k.startswith("ANTHROPIC_") for k in env if k in claude_code._STRIPPED_ENV)
+    assert "PATH" in env and env["HOME"] == "/home/someone"
+
+
+def test_cancellation_kills_and_awaits_process(cli):
+    proc = FakeProc("", hang=True)
+    waited = []
+    orig_wait = proc.wait
+
+    async def wait():
+        waited.append(True)
+        return await orig_wait()
+    proc.wait = wait
+    cli["install"](proc)
+
+    async def main():
+        task = asyncio.ensure_future(claude_code.complete("p"))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(main())
+    assert proc.killed and waited
+
+
+def test_kill_tolerates_vanished_process(cli):
+    proc = FakeProc("", hang=True)
+
+    def kill():
+        raise ProcessLookupError
+    proc.kill = kill
+    with pytest.raises(teachers.TeacherError, match="timed out"):
+        run(cli, proc, "p", timeout=0.05)
+
+
+def test_non_success_subtype_is_error_even_without_is_error(cli):
+    with pytest.raises(teachers.TeacherError, match="error_max_turns"):
+        run(cli, FakeProc(good("partial", subtype="error_max_turns")), "p")
+
+
+def test_success_text_mentioning_limits_is_returned(cli):
+    text = "Explains the rate limit and the login flow."
+    assert run(cli, FakeProc(good(text)), "p") == text
+
+
+def test_bare_login_or_authentication_is_not_unavailable(cli):
+    for msg in ("login page crashed", "authentication module failed"):
+        with pytest.raises(teachers.TeacherError) as err:
+            run(cli, FakeProc(good(msg, is_error=True)), "p")
+        assert not isinstance(err.value, teachers.TeacherUnavailable)
+
+
+def test_failed_calls_and_error_spend_are_recorded(cli):
+    with pytest.raises(teachers.TeacherError):
+        run(cli, FakeProc(good("oops", is_error=True)), "p")
+    with pytest.raises(teachers.TeacherError):
+        run(cli, FakeProc("", "boom", code=1), "p")  # no JSON: counted failed, no tokens
+    snap = teachers.usage_snapshot()["claude"]
+    assert snap["failed_calls"] == 2 and snap["calls"] == 1
+    assert snap["input_tokens"] == 10 and snap["cost_usd"] == 0.125
+
+
+def test_failed_calls_merge_on_write(monkeypatch, tmp_path):
+    out = tmp_path / "p.jsonl"
+    snap = {"claude": {"calls": 1, "failed_calls": 1, "input_tokens": 1, "output_tokens": 1,
+                       "cost_usd": 0.5, "models": {"m": 1}}}
+    monkeypatch.setattr(teachers, "usage_snapshot", lambda: snap)
+    teachers.write_usage(out)
+    total = teachers.write_usage(out)
+    assert total["claude"]["failed_calls"] == 2 and total["claude"]["cost_usd"] == 1.0

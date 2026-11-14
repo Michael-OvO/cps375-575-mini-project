@@ -46,11 +46,14 @@ async def run_many(items: list[dict], fn, out_path, concurrency: int = 16) -> No
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     trip(f"{consecutive_failures} consecutive item failures (last: {exc!r})")
                 return
-        consecutive_failures = 0
         if rows is None:  # fn could not process the item: leave it un-done so a rerun retries it
             unprocessed += 1
+            consecutive_failures += 1
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                trip(f"{consecutive_failures} consecutive items could not be processed (None)")
             logger.debug("item %s returned None; not marked done", item["id"])
             return
+        consecutive_failures = 0
         fresh = []
         for row in rows:
             if row["id"] not in seen:
