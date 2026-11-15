@@ -4,6 +4,24 @@ Fine-tune `Qwen/Qwen3.5-9B-Base` using Tinker to perform well on three tasks sim
 
 For the 375/575 requirements, grading breakdown, deliverables, and policies, see [`PROJECT.md`](PROJECT.md). This README covers installation and running the starter workflow.
 
+## Our pipeline
+
+Start with [`EXPERIMENTS.md`](EXPERIMENTS.md): versions, results, reflections and the next step. Run table with
+costs: [`runs/README.md`](runs/README.md). Background research: [`docs/research/`](docs/research/).
+
+| Stage | Module | Output |
+|---|---|---|
+| Generate verified data (Opus teacher) | `pipeline/generate/` (`math`, `code`, `ifeval`, `general`, `v2_teacher`, `v2_cells`) | `data/*.jsonl` (git-ignored) |
+| Find weaknesses | `pipeline/discover/` (taxonomy, coverage, explorer, probes, measure) | `data/discover/`, `reports/weakness_registry.md` |
+| Build the training set | `pipeline/select.py` (`--v2`, `--v3`), `pipeline/code_format.py`, `pipeline/leakage.py` | `runs/<name>/train.jsonl`, `manifest.json` |
+| Check it against the graders | `pipeline/preflight.py` | `runs/<name>/preflight.json` (training refuses without a pass) |
+| Train | `pipeline/train_sft.py` | `runs/<name>/checkpoint.json` |
+| Evaluate | `evaluation/eval_all.py`, `pipeline/dev_eval.py`, `pipeline/proxy_eval.py`, `pipeline/error_analysis.py` | `runs/<name>/*.json` |
+
+Reproduce v3: `python -m pipeline.select --name v3 --v3 --math 21700 --ifeval 8000 --code 6600`, then
+`python -m pipeline.preflight --name v3 --baseline v1 --ack ...` (acks in `runs/v3/preflight.json`), then
+`python -m pipeline.train_sft --name v3`. Tests: `python -m pytest -q`.
+
 ## What the starter code provides
 
 The starter script, [`evaluation/train_and_publish.py`](evaluation/train_and_publish.py), provides a minimal working training loop: creating a LoRA training client, preparing examples, updating parameters, and saving and publishing a checkpoint. It uses toy data. Your work is to connect real training data and implement your training strategy. Running the toy example alone does not fulfill the project requirements.

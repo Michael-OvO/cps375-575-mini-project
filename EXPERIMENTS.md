@@ -32,6 +32,29 @@ analysis: `reports/error_analysis_v1.md`. Designs: `docs/superpowers/specs/`. We
 
 ---
 
+## Status (paused 2026-11-14, weekly Opus usage at 41%; resets 2026-11-20)
+
+**Submission:** v1 (`evaluation/submission.json`, checkpoint published). Best public sum so far.
+
+**Acceptance rule (user, 2026-11-14):** a new version replaces the submission only if no area drops beyond
+noise (about 2 stderr) and the targeted area gains. Teacher is Opus only.
+
+**Next: v4 plan (not started; no code written yet).** From the v3 failure profile (`runs/v3/errors/`):
+- **Math (largest expected gain):** 88 of 96 dev failures are wrong answers, not truncations; correct answers
+  have a median of 150 tokens. Give every level 4-5 problem without a long solution a long, exploratory,
+  self-verifying Opus solution (300-3,000 student tokens): 1,199 MATH-train level 4, then ~5k teacher-new
+  level 5 (~20% of weekly usage); ~15k for full coverage. Keep short solutions only for levels 1-3.
+- **Code:** 72 of 83 dev failures fail an assert shown in the prompt. Re-answer all tasks in one format: one
+  code block, function body opening with a 2-6 line comment block (approach plus a hand-trace of one given
+  assert), imports inside the function (survives MBPP and HumanEval). ~5% of weekly usage.
+- **IF and code, after v4 SFT:** one RL run with verifiable rewards (constraint checkers, hidden tests),
+  ~$50 Tinker; IF fails mostly on unseen constraint types (217 of 284).
+- Pilot each generator on ~24 items and report the kept rate and cost before any full run.
+
+**Budget:** Tinker account A ~$112 spent of ~$250.
+
+---
+
 ## v3: v2 math and IF, harness-safe direct code (done; v1 stays the submission for now)
 
 **Results (2026-11-14).** Checkpoint `tinker://eeaf81d9-4d1b-5838-a910-46acab06c548:train:0/sampler_weights/v3`.
