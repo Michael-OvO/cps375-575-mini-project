@@ -38,6 +38,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=None)
     p.add_argument("--batch_size", type=int, default=32)
     p.add_argument("--no_publish", action="store_true")
+    p.add_argument("--skip_preflight", action="store_true", help="only for smoke tests; real runs must pass preflight")
     return p.parse_args(argv)
 
 
@@ -121,6 +122,9 @@ def main() -> None:
     args = parse_args()
 
     run_dir = RUNS / args.name
+    if not args.skip_preflight:
+        from pipeline.preflight import require_passed
+        require_passed(args.name)  # before rendering or any paid call
     rows = load_train_rows(run_dir)
     base_lr = args.lr if args.lr is not None else hyperparam_utils.get_lr(STUDENT)
     renderer = build_renderer()
