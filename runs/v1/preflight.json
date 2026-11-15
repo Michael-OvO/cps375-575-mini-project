@@ -1,0 +1,39 @@
+{
+  "name": "v1",
+  "baseline": null,
+  "ok": true,
+  "fails": [],
+  "warnings": [],
+  "acknowledged": {},
+  "unacknowledged": [],
+  "profile": {
+    "counts": {
+      "math": 21697,
+      "instruction_following": 6000,
+      "code": 6000,
+      "general": 1997
+    },
+    "share": {
+      "math": 0.6078612651986328,
+      "instruction_following": 0.16809547823163556,
+      "code": 0.16809547823163556,
+      "general": 0.05594777833809604
+    },
+    "features": {
+      "math.answer_chars": 484.0,
+      "math.prompt_chars": 468.0,
+      "math.answer_markdown": 0.36276904641194635,
+      "instruction_following.answer_chars": 1834.0,
+      "instruction_following.prompt_chars": 299.0,
+      "instruction_following.prompt_rules_first": 0.0205,
+      "code.answer_chars": 196.0,
+      "code.prompt_chars": 1908.0,
+      "code.prompt_names_function": 0.005,
+      "code.prompt_docstring_style": 0.0,
+      "code.prompt_harness_template": 0.7023333333333334,
+      "code.answer_prose_first": 0.0,
+      "general.answer_chars": 779.0,
+      "general.prompt_chars": 94.0
+    }
+  }
+}

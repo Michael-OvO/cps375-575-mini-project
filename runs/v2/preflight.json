@@ -1,0 +1,51 @@
+{
+  "name": "v2",
+  "baseline": "v1",
+  "ok": false,
+  "fails": [
+    "code_not_fence_first: 3003 examples (e.g. ['ct-6-43-1-plan', 'cc-021-4-plan', 'ct-25-23-1-plan'])"
+  ],
+  "warnings": [
+    "code.prompt_names_function: 0% -> 15%",
+    "code.answer_prose_first: 0% -> 43%",
+    "instruction_following.prompt_rules_first: 2% -> 16%",
+    "math.answer_markdown: 36% -> 51%"
+  ],
+  "acknowledged": {},
+  "unacknowledged": [
+    "code.prompt_names_function: 0% -> 15%",
+    "code.answer_prose_first: 0% -> 43%",
+    "instruction_following.prompt_rules_first: 2% -> 16%",
+    "math.answer_markdown: 36% -> 51%"
+  ],
+  "profile": {
+    "counts": {
+      "code": 7000,
+      "instruction_following": 8000,
+      "math": 21700,
+      "general": 1997
+    },
+    "share": {
+      "code": 0.18089257565185932,
+      "instruction_following": 0.2067343721735535,
+      "math": 0.5607669845207639,
+      "general": 0.05160606765382329
+    },
+    "features": {
+      "code.answer_chars": 287.0,
+      "code.prompt_chars": 1915.0,
+      "code.prompt_names_function": 0.14957142857142858,
+      "code.prompt_docstring_style": 0.06085714285714286,
+      "code.prompt_harness_template": 0.7084285714285714,
+      "code.answer_prose_first": 0.429,
+      "instruction_following.answer_chars": 1753.5,
+      "instruction_following.prompt_chars": 301.0,
+      "instruction_following.prompt_rules_first": 0.16,
+      "math.answer_chars": 582.0,
+      "math.prompt_chars": 470.0,
+      "math.answer_markdown": 0.5133179723502305,
+      "general.answer_chars": 779.0,
+      "general.prompt_chars": 94.0
+    }
+  }
+}
