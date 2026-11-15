@@ -23,6 +23,8 @@ _LIMIT = re.compile(r"usage limit|rate limit|limit reached|not logged in|log ?in
                     re.IGNORECASE)
 # Removed so the CLI uses the ChatGPT login rather than API-key billing.
 _STRIPPED_ENV = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_API_KEY")
+# "priority" is Codex's Fast mode (about 2x speed, more plan usage per call); empty means the standard tier.
+SERVICE_TIER = os.environ.get("CODEX_TEACHER_TIER", "").strip()
 
 
 def _child_env() -> dict[str, str]:
@@ -38,9 +40,10 @@ async def _reap(proc) -> None:
 
 
 def _argv(effort: str, out_file: str) -> list[str]:
+    tier = ["-c", f'service_tier="{SERVICE_TIER}"'] if SERVICE_TIER else []
     return ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
             "--ignore-rules", "-s", "read-only", "-m", GPT_MODEL,
-            "-c", f'model_reasoning_effort="{effort}"', "-o", out_file, "-"]
+            "-c", f'model_reasoning_effort="{effort}"', *tier, "-o", out_file, "-"]
 
 
 def parse_events(stdout: str) -> tuple[dict | None, str | None]:

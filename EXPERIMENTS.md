@@ -52,6 +52,11 @@ Pilot results:
 | math-long, the 11 items Opus missed (of 4,128) | 4/11 kept, $0.16 | 0/11 |
 | math-long, same 12 items via Codex CLI | 12/12, 2 min, no markdown | 12/12 |
 | if-count strict pass, 30 prompts, first try (low effort) | 25/30 (83%) | 85% kept with retries |
+| GPT-6 Astra + Fast tier via Codex, the same 11 Opus misses | 4/11 kept (the same 4 as Sol), 32 s wall | 0/11 |
+
+The 7 items that all three teachers miss probably have wrong reference answers. On this set Astra adds speed,
+not quality. Choose with `OPENAI_TEACHER_MODEL=gpt-6-astra` and `CODEX_TEACHER_TIER=priority` (Fast: about
+2x speed, more plan usage per call); the default stays Sol on the standard tier.
 
 Both teachers are near ceiling on math, so GPT's value is a second solution style per problem (more
 diverse targets), not a higher kept rate. API answers used markdown headings in 2 of 4 math solutions; the

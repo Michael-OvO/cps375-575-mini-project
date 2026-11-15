@@ -329,7 +329,7 @@ def test_run_many_list_result_resets_none_counter(tmp_path):
     assert len(jsonl.done_ids(out)) == 4  # ran to completion
 
 
-def test_codex_parse_events_reads_usage_and_errors():
+def test_codex_parse_events_reads_usage_and_errors(monkeypatch):
     from pipeline.teachers import codex_cli
     ok = ('{"type":"thread.started","thread_id":"t"}\n{"type":"item.completed","item":{"type":"agent_message",'
           '"text":"391"}}\n{"type":"turn.completed","usage":{"input_tokens":17410,"output_tokens":5}}\n')
@@ -339,6 +339,8 @@ def test_codex_parse_events_reads_usage_and_errors():
     argv = codex_cli._argv("high", "/x/out.txt")
     assert {"-s", "read-only", "--ephemeral", "--ignore-user-config"} <= set(argv)
     assert 'model_reasoning_effort="high"' in argv and argv[-1] == "-"
+    monkeypatch.setattr(codex_cli, "SERVICE_TIER", "priority")
+    assert 'service_tier="priority"' in codex_cli._argv("high", "/x/out.txt")
     assert "OPENAI_API_KEY" in codex_cli._STRIPPED_ENV
 
 
