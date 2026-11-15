@@ -35,3 +35,6 @@ runs/**/*.log
 runs/*/errors/
 runs/*/dropped.jsonl
 evaluation/submission.json
+
+# Generated previews (pipeline/preview.py)
+reports/data_preview.html

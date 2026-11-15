@@ -11,7 +11,6 @@ Usage:
 
 import argparse
 import asyncio
-import json
 import re
 import subprocess
 import sys

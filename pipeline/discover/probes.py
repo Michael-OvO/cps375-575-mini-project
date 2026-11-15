@@ -20,9 +20,8 @@ import logging
 import random
 import re
 
-from pipeline import formats, jsonl, teachers
+from pipeline import formats, teachers
 from pipeline.config import SEED
-from pipeline.constraints import extra
 from pipeline.constraints.sample import (DEV_ONLY_IDS, STANDARD_IDS, TRAIN_EXTRA_IDS, WRAP_CONFLICTS, _build,
                                          group_of, groups_of)
 from pipeline.discover import coverage

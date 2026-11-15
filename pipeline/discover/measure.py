@@ -14,7 +14,6 @@ import argparse
 import asyncio
 import json
 import math as _m
-import re
 from collections import defaultdict
 
 from pipeline import formats, jsonl
