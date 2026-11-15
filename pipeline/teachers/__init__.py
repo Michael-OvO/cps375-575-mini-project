@@ -42,8 +42,9 @@ def check_configured(names) -> None:
         if name == "gpt":
             if not os.environ.get("OPENAI_API_KEY"):
                 missing.append("gpt: OPENAI_API_KEY is not set")
-            if not os.environ.get("OPENAI_TEACHER_MODEL", "").strip():
-                missing.append("gpt: OPENAI_TEACHER_MODEL is not set (the GPT model id to use)")
+        elif name == "codex":
+            if not shutil.which("codex"):
+                missing.append("codex: the `codex` (Codex CLI) executable is not on PATH")
         elif name == "tinker":
             if not os.environ.get("TINKER_API_KEY"):
                 missing.append("tinker: TINKER_API_KEY is not set")
@@ -83,7 +84,7 @@ def usage_snapshot() -> dict:
     """Usage so far in this process, per teacher module that has been loaded."""
     out = {}
     # teacher name -> module; "claude" is the Claude Code backend, "claude_api" the API-key client
-    for name, mod in (("claude", "claude_code"), ("claude_api", "claude"), ("gpt", "gpt")):
+    for name, mod in (("claude", "claude_code"), ("claude_api", "claude"), ("gpt", "gpt"), ("codex", "codex_cli")):
         module = sys.modules.get(f"pipeline.teachers.{mod}")
         if module is not None:
             out[name] = json.loads(json.dumps(module.USAGE))
@@ -124,6 +125,9 @@ def get(name: str):
     if name == "gpt":
         from pipeline.teachers import gpt
         return gpt.complete
+    if name == "codex":
+        from pipeline.teachers import codex_cli
+        return codex_cli.complete
     if name == "tinker":
         from pipeline.teachers import tinker_teacher
         return tinker_teacher.complete

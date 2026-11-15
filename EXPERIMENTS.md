@@ -37,7 +37,25 @@ analysis: `reports/error_analysis_v1.md`. Designs: `docs/superpowers/specs/`. We
 **Submission:** v1 (`evaluation/submission.json`, checkpoint published). Best public sum so far.
 
 **Acceptance rule (user, 2026-11-14):** a new version replaces the submission only if no area drops beyond
-noise (about 2 stderr) and the targeted area gains. Teacher is Opus only.
+noise (about 2 stderr) and the targeted area gains. Teacher was Opus only; from 2026-11-15 GPT is a second
+teacher to widen the data distribution (below).
+
+**Second teacher: GPT-6.1 Sol (2026-11-15).** Chosen from OpenAI's model page: near GPT-6 Astra on its
+reasoning and coding evals at $2/$10 per M tokens (Astra $10/$50). Two backends, same model:
+`--teacher codex` (headless `codex exec` on the ChatGPT login, no API cost, ~17k cached agent-prompt tokens
+per call) and `--teacher gpt` (OpenAI API). Non-Claude pools go to `data/<pool>.<teacher>.jsonl`.
+Pilot results:
+
+| Check | GPT-6.1 Sol | Opus 5.5 |
+|---|---|---|
+| math-long, first 12 hard items (API, high effort) | 12/12 kept, $0.24 | 12/12 |
+| math-long, the 11 items Opus missed (of 4,128) | 4/11 kept, $0.16 | 0/11 |
+| math-long, same 12 items via Codex CLI | 12/12, 2 min, no markdown | 12/12 |
+| if-count strict pass, 30 prompts, first try (low effort) | 25/30 (83%) | 85% kept with retries |
+
+Both teachers are near ceiling on math, so GPT's value is a second solution style per problem (more
+diverse targets), not a higher kept rate. API answers used markdown headings in 2 of 4 math solutions; the
+Codex answers in 0 of 12. Preflight's `math.answer_markdown` drift check covers this before training.
 
 **Next: v4 plan (not started; no code written yet).** From the v3 failure profile (`runs/v3/errors/`):
 - **Math (largest expected gain):** 88 of 96 dev failures are wrong answers, not truncations; correct answers

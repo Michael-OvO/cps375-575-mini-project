@@ -12,7 +12,8 @@ STUDENT = "Qwen/Qwen3.5-9B-Base"
 # Fable 5.2 wrote the first part of the pool (until its usage limit on 2026-11-14);
 # Opus 5.5 is the default from then on. The served model is recorded per call in usage.json.
 CLAUDE_MODEL = os.environ.get("CLAUDE_TEACHER_MODEL", "claude-opus-5-5")
-GPT_MODEL = os.environ.get("OPENAI_TEACHER_MODEL", "")
+# GPT-6.1 Sol (2026-11-15): near GPT-6 Astra on OpenAI's reasoning and coding evals at a fifth of the price.
+GPT_MODEL = os.environ.get("OPENAI_TEACHER_MODEL", "").strip() or "gpt-6.1-sol"
 TINKER_TEACHER = "Qwen/Qwen3.5-397B-A17B"
 
 SEED = 20261113

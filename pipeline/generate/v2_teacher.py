@@ -1,4 +1,5 @@
-"""v2 teacher data (Claude via the CLI backend), aimed at gaps self-distillation cannot fill.
+"""v2 teacher data, aimed at gaps self-distillation cannot fill. Teacher: Claude Code CLI by default;
+--teacher gpt (OpenAI API) or codex (Codex CLI on the ChatGPT login).
 
 math-long:  hard problems where no base-model sample was kept; full reasoning with a check, verified
             against the known answer.
@@ -33,6 +34,7 @@ MATH_LONG = DATA / "v2_math_long.jsonl"
 CODE_PLAN = DATA / "v2_code_plan.jsonl"
 IF_COUNT = DATA / "v2_if_count.jsonl"
 IF_NEW = DATA / "v2_if_new.jsonl"
+TEACHER = "claude"  # set from --teacher in main()
 
 MATH_LONG_PROMPT = """Solve the following competition math problem.
 
@@ -113,13 +115,13 @@ def math_long_items(limit: int | None, correct_l5: int = 1000) -> list[dict]:
     failed = [i for i in pool.values() if not mined[i["id"]]["correct"]]
     failed.sort(key=lambda i: (subject.get(i["id"]) not in WEAK_SUBJECTS, -(i["level"] or 0)))
     right_l5 = [i for i in pool.values() if mined[i["id"]]["correct"] and i["level"] == 5][:correct_l5]
-    items = [dict(i, subject=subject.get(i["id"]), v1_correct=False, teacher="claude") for i in failed]
-    items += [dict(i, subject=subject.get(i["id"]), v1_correct=True, teacher="claude") for i in right_l5]
+    items = [dict(i, subject=subject.get(i["id"]), v1_correct=False, teacher=TEACHER) for i in failed]
+    items += [dict(i, subject=subject.get(i["id"]), v1_correct=True, teacher=TEACHER) for i in right_l5]
     return items[:limit]
 
 
 async def math_long(item: dict) -> list[dict] | None:
-    text = await teachers.get("claude")(MATH_LONG_PROMPT.format(problem=item["problem"]), effort="high")
+    text = await teachers.get(TEACHER)(MATH_LONG_PROMPT.format(problem=item["problem"]), effort="high")
     if not text:
         return None
     parsed = split_solution(text)
@@ -134,7 +136,7 @@ async def math_long(item: dict) -> list[dict] | None:
     return [{"id": f"{item['id']}-long", "pid": item["id"], "problem": item["problem"], "target": item["target"],
              "answer": answer, "solution": body, "level": item["level"], "source": item["source"],
              "subject": item.get("subject"), "v1_correct": item.get("v1_correct"), "student_tokens": ntok,
-             "style": "long", "teacher": "claude"}]
+             "style": "long", "teacher": TEACHER}]
 
 
 # ---------------------------------------------------------------- code-plan
@@ -150,7 +152,7 @@ def code_plan_items(limit: int | None) -> list[dict]:
     failed = sorted((t for t in tasks if not mined[t["id"]]["correct"]),
                     key=lambda t: t.get("category") not in WEAK_TOPICS)
     weak_rest = [t for t in tasks if mined[t["id"]]["correct"] and t.get("category") in WEAK_TOPICS]
-    return [dict(t, v1_correct=t in weak_rest, teacher="claude") for t in failed + weak_rest][:limit]
+    return [dict(t, v1_correct=t in weak_rest, teacher=TEACHER) for t in failed + weak_rest][:limit]
 
 
 def normalize_plan(plan: str) -> str:
@@ -160,7 +162,7 @@ def normalize_plan(plan: str) -> str:
 
 async def code_plan(item: dict) -> list[dict] | None:
     prompt = CODE_PLAN_PROMPT.format(tests="\n".join(item["tests"]), text=item["text"])
-    text = await teachers.get("claude")(prompt, effort="medium")
+    text = await teachers.get(TEACHER)(prompt, effort="medium")
     if not text:
         return None
     text = text.strip()
@@ -177,7 +179,7 @@ async def code_plan(item: dict) -> list[dict] | None:
         return []
     return [{"id": f"{item['id']}-plan", "task_id": item["id"], "text": item["text"], "tests": item["tests"],
              "hidden_tests": item.get("hidden_tests", []), "category": item.get("category"),
-             "response": text, "style": "plan", "teacher": "claude"}]
+             "response": text, "style": "plan", "teacher": TEACHER}]
 
 
 # ---------------------------------------------------------------- if-count
@@ -221,12 +223,12 @@ def if_count_items(limit: int | None, skip: int = 4000, count: int = 2000) -> li
             cons.append(_build("language:response_language", rng, it["task"]))
         rng.shuffle(cons)
         items.append({"id": f"ifc-{it['id'][3:]}", "task": it["task"], "prompt": render(it["task"], cons, rng),
-                      "constraints": [{"id": c["id"], "kwargs": c["kwargs"]} for c in cons], "teacher": "claude"})
+                      "constraints": [{"id": c["id"], "kwargs": c["kwargs"]} for c in cons], "teacher": TEACHER})
     return items[:limit]
 
 
 async def if_count(item: dict) -> list[dict] | None:
-    complete = teachers.get("claude")
+    complete = teachers.get(TEACHER)
     got = False
     for _ in range(gif.ATTEMPTS):
         response = await complete(item["prompt"], system=gif.SYSTEM, max_tokens=gif.RESPONSE_MAX_TOKENS)
@@ -235,7 +237,7 @@ async def if_count(item: dict) -> list[dict] | None:
         got = True
         if len(response.split()) <= gif.MAX_RESPONSE_WORDS and vi.passes(item["prompt"], item["constraints"], response):
             return [{"id": f"if-{item['id']}", "task": item["task"], "prompt": item["prompt"],
-                     "constraints": item["constraints"], "response": response, "teacher": "claude",
+                     "constraints": item["constraints"], "response": response, "teacher": TEACHER,
                      "style": "count"}]
     return [] if got else None
 
@@ -261,7 +263,7 @@ def if_new_items(limit: int | None, skip: int = 6000) -> list[dict]:
         cons = [first] + rest[: rng.choice(EXTRA_RULES)]
         rng.shuffle(cons)
         items.append({"id": f"ifn-{it['id'][3:]}", "task": it["task"], "prompt": render(it["task"], cons, rng),
-                      "constraints": [{"id": c["id"], "kwargs": c["kwargs"]} for c in cons], "teacher": "claude"})
+                      "constraints": [{"id": c["id"], "kwargs": c["kwargs"]} for c in cons], "teacher": TEACHER})
     return items[:limit]
 
 
@@ -278,13 +280,19 @@ def main() -> None:
     p.add_argument("command", choices=["math-long", "code-plan", "if-count", "if-new"])
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
+    p.add_argument("--teacher", choices=["claude", "gpt", "codex"], default="claude",
+                   help="non-claude teachers write to <pool>.<teacher>.jsonl so pools stay separable")
     args = p.parse_args()
-    teachers.check_configured(["claude"])
+    global TEACHER
+    TEACHER = args.teacher
+    teachers.check_configured([TEACHER])
     plan = {"math-long": (math_long_items, math_long, MATH_LONG),
             "code-plan": (code_plan_items, code_plan, CODE_PLAN),
             "if-count": (if_count_items, if_count, IF_COUNT),
             "if-new": (if_new_items, if_new, IF_NEW)}[args.command]
     items_fn, fn, out = plan
+    if TEACHER != "claude":
+        out = out.with_suffix(f".{TEACHER}.jsonl")
     try:
         asyncio.run(run_many(items_fn(args.limit), fn, out, args.concurrency))
     finally:

@@ -130,18 +130,16 @@ def test_check_configured_lists_everything_missing(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError) as err:
         teachers.check_configured(["claude_api", "gpt", "tinker"])
     msg = str(err.value)
-    for needle in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENAI_TEACHER_MODEL", "TINKER_API_KEY"):
+    for needle in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "TINKER_API_KEY"):
         assert needle in msg
 
 
 def test_check_configured_accepts_each_credential_form(monkeypatch, tmp_path):
     import pytest
     _clear_teacher_env(monkeypatch, tmp_path)
-    monkeypatch.setenv("OPENAI_API_KEY", "x")
-    monkeypatch.setenv("OPENAI_TEACHER_MODEL", "  ")
-    with pytest.raises(RuntimeError, match="OPENAI_TEACHER_MODEL"):
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         teachers.check_configured(["gpt"])
-    monkeypatch.setenv("OPENAI_TEACHER_MODEL", "some-model")
+    monkeypatch.setenv("OPENAI_API_KEY", "x")  # the model id has a default (config.GPT_MODEL)
     monkeypatch.setenv("TINKER_API_KEY", "x")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "x")
     teachers.check_configured(["gpt", "tinker", "claude_api"])
@@ -185,8 +183,10 @@ def test_claude_and_gpt_record_usage_and_served_model(monkeypatch):
         class responses:
             @staticmethod
             async def create(**kw):
+                sent.update(kw)
                 return _Resp("gpt-served-id", 3, 4)
 
+    sent = {}
     monkeypatch.setattr(claude, "USAGE", teachers.new_usage())
     monkeypatch.setattr(gpt, "USAGE", teachers.new_usage())
     monkeypatch.setattr(claude, "_get_client", lambda: FakeAnthropic)
@@ -194,7 +194,8 @@ def test_claude_and_gpt_record_usage_and_served_model(monkeypatch):
     monkeypatch.setattr(gpt, "GPT_MODEL", "gpt-requested")
     assert asyncio.run(claude.complete("p")) == "hi"
     assert asyncio.run(claude.complete("p")) == "hi"
-    assert asyncio.run(gpt.complete("p")) == "hi"
+    assert asyncio.run(gpt.complete("p", effort="high")) == "hi"
+    assert sent["reasoning"] == {"effort": "high"} and sent["model"] == "gpt-requested"
     snap = teachers.usage_snapshot()
     assert snap["claude_api"] == {"calls": 2, "input_tokens": 20, "output_tokens": 40,
                               "models": {"claude-fable-5-2": 2}}
@@ -326,3 +327,20 @@ def test_run_many_list_result_resets_none_counter(tmp_path):
 
     asyncio.run(runner.run_many([{"id": str(i)} for i in range(100)], fn, out, concurrency=1))
     assert len(jsonl.done_ids(out)) == 4  # ran to completion
+
+
+def test_codex_parse_events_reads_usage_and_errors():
+    from pipeline.teachers import codex_cli
+    ok = ('{"type":"thread.started","thread_id":"t"}\n{"type":"item.completed","item":{"type":"agent_message",'
+          '"text":"391"}}\n{"type":"turn.completed","usage":{"input_tokens":17410,"output_tokens":5}}\n')
+    assert codex_cli.parse_events(ok) == ({"input_tokens": 17410, "output_tokens": 5}, None)
+    bad = '{"type":"error","message":"You have hit your usage limit"}\nnot json\n'
+    assert codex_cli.parse_events(bad) == (None, "You have hit your usage limit")
+    argv = codex_cli._argv("high", "/x/out.txt")
+    assert {"-s", "read-only", "--ephemeral", "--ignore-user-config"} <= set(argv)
+    assert 'model_reasoning_effort="high"' in argv and argv[-1] == "-"
+    assert "OPENAI_API_KEY" in codex_cli._STRIPPED_ENV
+
+
+def test_codex_registered():
+    assert teachers.get("codex").__module__ == "pipeline.teachers.codex_cli"
