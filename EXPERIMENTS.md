@@ -74,6 +74,21 @@ Codex answers in 0 of 12. Preflight's `math.answer_markdown` drift check covers 
   ~$50 Tinker; IF fails mostly on unseen constraint types (217 of 284).
 - Pilot each generator on ~24 items and report the kept rate and cost before any full run.
 
+**IF-RLVR pilot (2026-11-15, Codex teacher only).** Source: `allenai/IF_multi_constraints_upto5` (train,
+ODC-BY), 29 new constraint types with upstream checker code (vendored, `pipeline/constraints/ifevalg/`).
+Pool (`python -m pipeline.generate.if_rlvr pool`): 95,373 rows -> **68,873 prompts**, drops
+safety/jailbreak sources 10,741, held-out types 12,400, no separable base task 1,462, near-dup 1,255
+(MinHash, Jaccard 0.6), exact dup 595, eval overlap 47 (MATH test, IFEval, MBPP, HumanEval), our dev /
+probe overlap 0. Held out from training: `counting_composition`, `first_word_sent`, `keyword_specific_position`
+(closest to our dev-only types, so the unseen-type dev score stays honest).
+Pilot: 200 prompts balanced over the 26 trainable new types. Kept **125/200**: 107 first pass (96 on attempt 1),
+18 more from a retry that tells the teacher which instruction it broke (13 of them on the first feedback).
+By constraint count: 1 -> 30/32, 2 -> 41/61, 3 -> 26/47, 4 -> 25/46, 5 -> 3/14. Hardest types: bigram
+wrapping 1/11, sentence hyphens 2/11, copying 2-3/9-11, letter counting 4/15. Spot check: answers are real
+answers; 3 used a meta label (e.g. "Palindrome: level."). Codex at 24 parallel calls gets 403s from the
+ChatGPT backend; 8-12 is clean (403 now stops a run).
+Next: put the pool into `select.py` behind a flag and run preflight; then the full generation.
+
 **Budget:** Tinker account A ~$112 spent of ~$250.
 
 ---

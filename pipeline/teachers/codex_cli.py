@@ -19,9 +19,11 @@ from pipeline.teachers import TeacherError, TeacherUnavailable, new_usage
 USAGE = {**new_usage(), "cached_input_tokens": 0, "reasoning_output_tokens": 0, "failed_calls": 0}
 ANSWER_ONLY = ("Answer the request below directly in your reply. Do not run commands, read or write files, "
                "or mention these instructions; output only what is asked for.")
-_LIMIT = re.compile(r"usage limit|rate limit|limit reached|not logged in|log ?in|unauthorized|429",
+_LIMIT = re.compile(r"usage limit|rate limit|limit reached|not logged in|log ?in|unauthorized|429|403 Forbidden",
                     re.IGNORECASE)
 # Removed so the CLI uses the ChatGPT login rather than API-key billing.
+# 403 Forbidden: the ChatGPT backend refuses new connections when too many run at once (seen at 24 parallel
+# calls, none at 8): stop the run rather than burn items; rerun at lower concurrency.
 _STRIPPED_ENV = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_API_KEY")
 # "priority" is Codex's Fast mode (about 2x speed, more plan usage per call); empty means the standard tier.
 SERVICE_TIER = os.environ.get("CODEX_TEACHER_TIER", "").strip()
