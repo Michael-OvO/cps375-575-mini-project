@@ -1,0 +1,5 @@
+{
+  "checkpoint_path": "tinker://02289e76-4b63-587a-9c09-ffb098a76bba:train:0/sampler_weights/v2",
+  "math_rest": 0.732,
+  "humaneval": 0.31097560975609756
+}

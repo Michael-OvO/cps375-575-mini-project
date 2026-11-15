@@ -27,10 +27,28 @@ analysis: `reports/error_analysis_v1.md`. Designs: `docs/superpowers/specs/`. We
 | base | 47.9 | 15.8 | 65.4 | 17.2 | 65.0 | 34.7 / 25.1 | 70.7 | 2.1 (eval) |
 | smoke | — | — | 70.0 | 65.5 | 57.3 | — | — | 0.8 |
 | v1 | 72.0 | 70.0 | 75.1 | 67.7 | 74.5 | 66.4 / 52.9 | 67.1 | ~25 |
+| v2 | 72.1 | 71.6 | 70.0 | 70.5 | 70.6 | 71.2 / 47.0 | 31.1 | ~33 |
 
 ---
 
-## v2 (in progress): failure-targeted data plus weakness discovery
+## v2: failure-targeted data plus weakness discovery (done; v1 stays the submission)
+
+**Results (2026-11-14).**
+- **Math improved:** MATH-500 70.0 → 71.6; MATH test minus MATH-500 70.8 → 73.2; dev 67.7 → 70.5; dev level 5 39 → 50.5.
+- **Code regressed:** MBPP 75.1 → 70.0; dev 74.5 → 70.6; HumanEval 67.1 → 31.1.
+- **IF:** public flat (72.1); dev seen 66.4 → 71.2; dev unseen 52.9 → 47.0; new unseen types 41.2 (no v1 number).
+- **Probes:** 48/57/29 → 50/63/33 (math / code / IF), so the targeted weaknesses moved.
+- **Cost:** training ~$29 plus evals ~$4. About 50 minutes were lost to Mac sleep (see the memory note).
+
+**Reflection.**
+- **HumanEval collapse:** a format bug. The code-cells data paired HumanEval-style prompts (signature plus docstring) with plan-first answers. The HumanEval harness appends the output after the signature, so prose breaks the program: all 113 failures start with prose, and 86 contain no code.
+- **MBPP and dev code drop:** v2 answered almost every one of these directly; it planned on only 13 of 257 MBPP problems and 18 of 337 dev tasks. The losses are wrong direct code (MBPP: 22 of 26 losses). The direct v1 code examples fell from 6,000 to 3,997 in favour of a mix of two styles; that is the likely cause, but it is not proven.
+- **Math:** long solutions work. Level 5 gained 11 points.
+- **IF:** more rules per prompt helped seen types and hurt unseen ones.
+
+**Next (v3 proposal).** Keep the v2 math and IF data. Make every code answer start with the code block: answer the plan and cell tasks with their verified code directly, and restore all 6,000 v1 direct examples. No new Opus data; one more training run (~$29).
+
+### v2 build notes
 
 **Change from v1.** Same recipe (rank 32, lr 4.73e-4, batch 32, 1 epoch, from base). The data changes,
 each backed by a v1 failure (map in `docs/superpowers/specs/2026-11-14-v2-design.md`):
