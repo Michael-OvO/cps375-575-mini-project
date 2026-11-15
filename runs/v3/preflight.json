@@ -1,0 +1,49 @@
+{
+  "name": "v3",
+  "baseline": "v1",
+  "ok": true,
+  "fails": [],
+  "warnings": [
+    "code.tests_no_space_eq: 0% -> 38%",
+    "math.answer_markdown: 36% -> 51%",
+    "instruction_following.prompt_rules_first: 2% -> 16%"
+  ],
+  "acknowledged": {
+    "code.tests_no_space_eq": "audit: 38% of MBPP asserts have no spaces around ==; matched on purpose",
+    "math.answer_markdown": "v2 long math solutions (MATH +1.6, level 5 +11 in v2); kept",
+    "instruction_following.prompt_rules_first": "v2 IF data puts rules before the task in 40% of new prompts (discovery finding); kept"
+  },
+  "unacknowledged": [],
+  "profile": {
+    "counts": {
+      "code": 6578,
+      "math": 21700,
+      "general": 1997,
+      "instruction_following": 8000
+    },
+    "share": {
+      "code": 0.17186152841280208,
+      "math": 0.5669497060744612,
+      "general": 0.05217504898758981,
+      "instruction_following": 0.20901371652514697
+    },
+    "features": {
+      "code.answer_chars": 202.0,
+      "code.prompt_chars": 1912.0,
+      "code.prompt_names_function": 0.08300395256916997,
+      "code.prompt_docstring_style": 0.045606567345697784,
+      "code.prompt_harness_template": 0.7107023411371237,
+      "code.answer_prose_first": 0.0,
+      "code.tests_use_module": 0.009121313469139556,
+      "code.tests_no_space_eq": 0.38263910003040436,
+      "math.answer_chars": 582.0,
+      "math.prompt_chars": 470.0,
+      "math.answer_markdown": 0.5133179723502305,
+      "general.answer_chars": 779.0,
+      "general.prompt_chars": 94.0,
+      "instruction_following.answer_chars": 1753.5,
+      "instruction_following.prompt_chars": 301.0,
+      "instruction_following.prompt_rules_first": 0.16
+    }
+  }
+}

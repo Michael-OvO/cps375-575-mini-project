@@ -31,6 +31,35 @@ analysis: `reports/error_analysis_v1.md`. Designs: `docs/superpowers/specs/`. We
 
 ---
 
+## v3: v2 math and IF, harness-safe direct code (built, preflight passed; not trained)
+
+**Train-vs-eval audit (2026-11-14), after the v2 HumanEval collapse.** Compared every training format with
+the graded harness code (`inspect_evals` mbpp/humaneval, `tinker_cookbook/eval/inspect_utils.py`). Bugs found,
+all present since v1:
+- **HumanEval drops top-level imports.** `extract_function_body` keeps only what follows the first `def` line.
+  About 24% of code targets started with an import, so the model learned a habit that fails with NameError.
+  Estimated cost on v1: ~6.7 HumanEval points.
+- **MBPP tests can need the model's own imports.** 13/257 MBPP items use `math.isclose`, and the harness adds no
+  `test_imports`. No training test ever called a module. Estimated cost: ~2 MBPP points.
+- **Trailing whitespace.** The eval adapter strips user content; training prompts ended with `"## Completion:\n"`.
+- **Test style.** 38% of MBPP asserts write `f(x)==y`; training never did.
+- Not fixed yet: the dev code eval uses our own few-shot and so differs from the graded MBPP prompt.
+
+**Fixes.**
+- `pipeline/code_format.py`: imports go inside each function, modules the tests call also stay at top level,
+  float asserts become `math.isclose` in half of the tasks that have them, and 38% of tasks drop the spaces
+  around `==`. Every transformed row must pass its own tests (`select.harness_safe_code`).
+- `formats.to_messages` and `student.Sampler` strip prompts.
+- Preflight now FAILs unstripped prompts and code with top-level statements other than functions, classes
+  and imports of modules the tests call.
+
+**Change from v2.** `select --v3 --math 21700 --ifeval 8000 --code 6600`: same math and IF as v2. Code is all
+direct (no plans): 6,062 v1 tasks plus 516 HumanEval-style and long-spec cell tasks, answered with their
+verified code. 38,275 examples, 19.1M tokens, ~$28. Preflight vs v1 passed with three acknowledged shifts
+(no-space asserts, math markdown from long solutions, IF rules-first); see `runs/v3/preflight.json`.
+
+---
+
 ## v2: failure-targeted data plus weakness discovery (done; v1 stays the submission)
 
 **Results (2026-11-14).**

@@ -6,7 +6,10 @@ HumanEval harness (67 -> 31), and function-naming task texts pulled the model aw
 
 Checks (runs/<name>/preflight.json records the result; train_sft refuses to start unless it passed):
 - FAIL rules: answer formats that a harness would score wrong (code must open with one ```python block and end
-  with it; math must end with an `ANSWER:` line without \\boxed; no empty assistant turn).
+  with it; math must end with an `ANSWER:` line without \\boxed; no empty assistant turn). Since the 2026-11-14
+  audit also: user prompts must be stripped (the eval adapter strips them), and code may hold nothing at top
+  level but functions, classes and imports of modules its tests call (HumanEval drops everything before the
+  first function body).
 - FAIL: a sample of code targets must pass the asserts shown in their own prompt (harness-style extraction).
 - WARN: style shares that moved by more than 10 points (or length medians by more than 1.5x) against a baseline
   training set. A warning needs an explicit `--ack <feature>` with a reason recorded in preflight.json.
@@ -16,6 +19,7 @@ Usage:
 """
 
 import argparse
+import ast
 import json
 import random
 import re
@@ -24,6 +28,7 @@ import sys
 from collections import Counter, defaultdict
 
 from pipeline import jsonl
+from pipeline.code_format import modules_in_tests
 from pipeline.config import RUNS, SEED
 from pipeline.verify import code as vc
 
@@ -56,16 +61,43 @@ def called_name(prompt: str) -> str | None:
     return m.group(1) if m else None
 
 
+def prompt_tests(prompt: str) -> list[str]:
+    return ASSERT_LINE.findall(prompt.split(FEWSHOT_MARK, 1)[-1])
+
+
+def top_level_unsafe(code: str, tests: list[str]) -> bool:
+    """True if the code has top-level statements a body-only harness (HumanEval) would drop: anything but
+    functions, classes and imports of modules the tests themselves call (MBPP needs those at top level)."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return True
+    keep = modules_in_tests(tests)
+    for n in tree.body:
+        if isinstance(n, (ast.FunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(n, ast.Import) and {a.name.split(".")[0] for a in n.names} <= keep:
+            continue
+        if isinstance(n, ast.ImportFrom) and n.module in keep:
+            continue
+        return True
+    return False
+
+
 def format_errors(ex: dict) -> list[str]:
     task, ans = ex["task"], _answer(ex)
     if not ans.strip():
         return ["empty_answer"]
     errs = []
+    if _user(ex) != _user(ex).strip():
+        errs.append("prompt_not_stripped")  # the eval adapter strips user content; trailing tokens are train-only
     if task == "code":
         if not FENCE_OPEN.match(ans):
             errs.append("code_not_fence_first")  # completion-style harnesses append the answer to the prompt
         if ans.count("```") != 2 or not ans.rstrip().endswith("```"):
             errs.append("code_not_single_block")
+        elif top_level_unsafe(vc.extract_code(ans), prompt_tests(_user(ex))):
+            errs.append("code_top_level_statements")
     elif task == "math":
         last = ans.rstrip().splitlines()[-1]
         if not re.match(r"ANSWER:\s*\S", last):
@@ -86,6 +118,9 @@ def features(ex: dict) -> dict[str, float]:
         f["prompt_docstring_style"] = float('"""' in text or "'''" in text)
         f["prompt_harness_template"] = float("## Prompt:" in prompt)
         f["answer_prose_first"] = float(not FENCE_OPEN.match(ans))
+        tests = prompt_tests(prompt)
+        f["tests_use_module"] = float(bool(modules_in_tests(tests)))
+        f["tests_no_space_eq"] = float(any("==" in t and " == " not in t for t in tests))
     elif task == "math":
         f["answer_markdown"] = float(bool(re.search(r"\*\*|^#+ |^- ", ans, re.M)))
     elif task == "instruction_following":

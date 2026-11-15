@@ -5,7 +5,7 @@ import pytest
 from pipeline import preflight as pf
 
 HARNESS = ("Instructions...\n# Now, do it for the following task.\n\n## Prompt:\n```python\n{text}\n```\n\n"
-           "## Test Case:\n```python\nassert add_two(1) == 3\n```\n\n## Completion:\n")
+           "## Test Case:\n```python\nassert add_two(1) == 3\n```\n\n## Completion:")
 
 
 def ex(task, prompt, answer, i="x"):
@@ -21,6 +21,16 @@ def test_code_format_rules():
     assert pf.format_errors(ex("code", p, GOOD_CODE)) == []
     assert "code_not_fence_first" in pf.format_errors(ex("code", p, "Plan: add 2.\n\n" + GOOD_CODE))
     assert "code_not_single_block" in pf.format_errors(ex("code", p, GOOD_CODE + "\n\n```python\nprint(1)\n```"))
+
+
+def test_audit_rules_stripped_prompt_and_top_level_code():
+    p = HARNESS.format(text="Write a function to add two.")
+    assert "prompt_not_stripped" in pf.format_errors(ex("code", p + "\n", GOOD_CODE))
+    top = "```python\nimport os\n\ndef add_two(x):\n    return x + 2\n```"
+    assert "code_top_level_statements" in pf.format_errors(ex("code", p, top))
+    iso = p.replace("assert add_two(1) == 3", "assert math.isclose(add_two(1), 3)")
+    ok = "```python\nimport math\n\ndef add_two(x):\n    return x + 2\n```"
+    assert pf.format_errors(ex("code", iso, ok)) == []
 
 
 def test_math_format_rules():

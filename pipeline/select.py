@@ -4,14 +4,18 @@ Usage:
     python -m pipeline.select --name v1 --math 30000 --ifeval 6000 --code 6000 --general 2000
     python -m pipeline.select --name smoke --math 500 --ifeval 200 --code 200 --general 100
     python -m pipeline.select --name v2 --v2 --ifeval 8000 --code 7000   # adds the v2 pools (see build)
+    python -m pipeline.select --name v3 --v3 --math 21700 --ifeval 8000 --code 6600   # v2 math/IF, direct code
 """
 
 import argparse
 import json
 import random
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from pipeline import formats, jsonl, leakage
+from pipeline.code_format import add_test_imports, inline_imports, modules_in_tests, vary_tests
+from pipeline.verify import code as vc
 from pipeline.config import DATA, MAX_TRAIN_TOKENS, RUNS, SEED, STUDENT, is_dev
 from pipeline.dev import IF_DEV_PER_MILLE, dedupe_code_tasks, is_code_dev
 from pipeline.generate.math import DEV_PER_MILLE as MATH_DEV_PER_MILLE
@@ -89,6 +93,30 @@ def code_example(row: dict, rng: random.Random) -> dict:
     # v2 plan-first rows carry the whole answer (plan, then one code block)
     target = row["response"] if "response" in row else formats.code_target(row["code"])
     return {"id": row["id"], "task": "code", "messages": formats.to_messages(prompt, target)}
+
+
+V3_CELL_STYLES = ("HumanEval-style", "longer specification")
+
+
+def harness_safe_code(row: dict, rng: random.Random) -> dict | None:
+    """v3: a direct-code row that survives both graded harnesses (see pipeline/code_format.py), or None.
+    Plan-first rows give up their plan and keep the verified code. The result must pass its (varied) tests."""
+    code = row.get("code") or vc.extract_code(row["response"])
+    tests = vary_tests(row["tests"], rng)
+    code = inline_imports(code, modules_in_tests(tests))
+    if code is None:
+        return None
+    code = add_test_imports(code, tests)
+    if not vc.run_tests(code, tests):
+        return None
+    return {k: v for k, v in row.items() if k != "response"} | {"code": code, "tests": tests}
+
+
+def harness_safe_pool(rows: list[dict], rng: random.Random) -> list[dict]:
+    seeds = [rng.random() for _ in rows]
+    with ThreadPoolExecutor(8) as ex:
+        out = list(ex.map(lambda rs: harness_safe_code(rs[0], random.Random(rs[1])), zip(rows, seeds)))
+    return [r for r in out if r is not None]
 
 
 def if_example(row: dict) -> dict:
@@ -202,10 +230,14 @@ def _check_counts(sources: list[dict], kept: list[dict]) -> None:
         raise ValueError(f"manifest source counts ({total}) do not match kept examples ({len(kept)})")
 
 
-def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = False) -> dict:
+def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = False, v3: bool = False) -> dict:
     """v2=True adds the v2 pools ahead of the v1 ones: long math solutions replace short ones on the same
     problem, plan-first code answers replace direct ones on the same task, and the cell-targeted and new IF
-    items come first. Sizes still cap each task."""
+    items come first. Sizes still cap each task.
+    v3=True keeps the v2 math and IF pools but makes all code direct and harness-safe: the v1 direct tasks
+    plus the HumanEval-style and long-spec cell tasks (code only, no plan), each passed through
+    harness_safe_code."""
+    v2 = v2 or v3
     rng = random.Random(SEED)
     dupes = {t: [] for t in TASKS}
     missing_pools: list[str] = []
@@ -224,10 +256,14 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
                                        _read_pool("v2_math_cells.jsonl", dupes["math"], missing_pools), rng)
         plans_ = _read_pool("v2_code_plan.jsonl", dupes["code"], missing_pools)
         cells_ = _read_pool("v2_code_cells.jsonl", dupes["code"], missing_pools)
-        first = plans_ + cells_
-        rng.shuffle(first)
-        planned = {r["task_id"] for r in plans_}
-        code_pool = first + [r for r in code_pool if r["id"] not in planned]
+        if v3:
+            cells_ = [r for r in cells_ if r["cell"].get("prompt_style", "").startswith(V3_CELL_STYLES)]
+            code_pool = harness_safe_pool(cells_, rng) + harness_safe_pool(code_pool, rng)
+        else:
+            first = plans_ + cells_
+            rng.shuffle(first)
+            planned = {r["task_id"] for r in plans_}
+            code_pool = first + [r for r in code_pool if r["id"] not in planned]
         new_if = (_read_pool("v2_if_count.jsonl", dupes["ifeval"], missing_pools)
                   + _read_pool("v2_if_new.jsonl", dupes["ifeval"], missing_pools))
         rng.shuffle(new_if)
@@ -378,13 +414,14 @@ def main() -> None:
     p.add_argument("--code", type=int, default=6000)
     p.add_argument("--general", type=int, default=2000)
     p.add_argument("--v2", action="store_true", help="add the v2 pools (long math, plan code, cells, new IF)")
+    p.add_argument("--v3", action="store_true", help="v2 math/IF pools, all code direct and harness-safe")
     p.add_argument("--no-overlap-check-ok", action="store_true",
                    help="a human has decided to use teacher-written math/code without the test-set overlap filter")
     args = p.parse_args()
     try:
         manifest = build(args.name, {"math": args.math, "ifeval": args.ifeval,
                                      "code": args.code, "general": args.general},
-                         no_overlap_check_ok=args.no_overlap_check_ok, v2=args.v2)
+                         no_overlap_check_ok=args.no_overlap_check_ok, v2=args.v2, v3=args.v3)
     except OverlapCheckNotDecided as exc:
         raise SystemExit(f"ERROR: {exc}") from None
     print(json.dumps(manifest, indent=2))

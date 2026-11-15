@@ -26,7 +26,8 @@ class Sampler:
     async def answer(
         self, text: str, max_tokens: int, temperature: float = 0.0, n: int = 1
     ) -> list[str]:
-        prompt = self.renderer.build_generation_prompt([{"role": "user", "content": text}])
+        # Stripped like the graded inspect adapter, so dev evals see the same prompt tokens.
+        prompt = self.renderer.build_generation_prompt([{"role": "user", "content": text.strip()}])
         params = tinker.SamplingParams(
             temperature=temperature,
             max_tokens=max_tokens,

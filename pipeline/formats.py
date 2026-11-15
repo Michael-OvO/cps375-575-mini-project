@@ -118,4 +118,5 @@ def code_target(code: str) -> str:
 
 
 def to_messages(prompt: str, target: str) -> list[dict]:
-    return [{"role": "user", "content": prompt}, {"role": "assistant", "content": target}]
+    # Stripped: the inspect eval adapter strips user content, so a trailing "\n" would be a train-only token.
+    return [{"role": "user", "content": prompt.strip()}, {"role": "assistant", "content": target.strip()}]
