@@ -13,7 +13,7 @@ tests; competition math with a single answer; verifiable constraints.
   Opus-generated or from train splits, and passes the n-gram test-overlap filter (`pipeline/leakage.py`).
 - Public test sets give aggregate scores only. Design data from the private dev sets (`data/*_dev.jsonl`)
   and from discovery probes, never from public test items.
-- Ask before paid steps. Tinker budget is ~$250 per account; ~$45 spent on account A as of 2026-11-14.
+- Ask before paid steps. Tinker budget is ~$250 per account; ~$112 spent on account A as of 2026-11-14 (after v3).
 - The user uploads `evaluation/submission.json` to Gradescope. Agents never submit.
 
 **Where things are.** Run table with costs: `runs/README.md`. Per-run outputs: `runs/<name>/`. Error
@@ -28,10 +28,30 @@ analysis: `reports/error_analysis_v1.md`. Designs: `docs/superpowers/specs/`. We
 | smoke | — | — | 70.0 | 65.5 | 57.3 | — | — | 0.8 |
 | v1 | 72.0 | 70.0 | 75.1 | 67.7 | 74.5 | 66.4 / 52.9 | 67.1 | ~25 |
 | v2 | 72.1 | 71.6 | 70.0 | 70.5 | 70.6 | 71.2 / 47.0 | 31.1 | ~33 |
+| v3 | 69.4 | 72.0 | 73.5 | 70.5 | 75.7 | 70.5 / 50.3 | 67.7 | ~32 |
 
 ---
 
-## v3: v2 math and IF, harness-safe direct code (built, preflight passed; not trained)
+## v3: v2 math and IF, harness-safe direct code (done; v1 stays the submission for now)
+
+**Results (2026-11-14).** Checkpoint `tinker://eeaf81d9-4d1b-5838-a910-46acab06c548:train:0/sampler_weights/v3`.
+- **Math kept v2's gain:** MATH-500 72.0 (v1 70.0); MATH test minus MATH-500 71.8; dev 70.5.
+- **Code recovered from v2:** MBPP 73.5 (v1 75.1, v2 70.0); dev 75.7 (best so far); HumanEval 67.7 (v1 67.1).
+  - MBPP failures are now all fenced code with wrong logic: no NameError, no prose. The `math.isclose` items
+    went from 7/13 to 10/13, so the import fix worked. Against v1: 15 items gained, 19 lost, within noise
+    (stderr 2.8 points).
+  - HumanEval: 8 failures are unfenced, unindented function bodies (SyntaxError); the rest are wrong answers.
+- **IF dipped:** IFEval 69.4 (v1 72.0, v2 72.1; prompt-strict 63.2 vs 66.9). The IF data is identical to
+  v2's, so this is probably run-to-run variance, but it is about 2 stderr and not proven.
+  Dev seen 70.5, unseen 50.3, new types 42.5.
+- **Probes:** 49/59/30 (math / code / IF), v2 50/63/33.
+- **Cost:** ~$28 training plus ~$4 evals; 58 minutes of training, no sleep stalls.
+
+**Reflection.** The format bugs are fixed and code is back to v1's level on public sets and above it on dev.
+Public sum: v1 217.1, v3 214.9, v2 213.7; dev favours v3 (math +2.8, code +1.2, IF seen +4.1, unseen -2.6).
+Not a clear win over v1, so the submission stays v1 until the user decides.
+
+### v3 build notes
 
 **Train-vs-eval audit (2026-11-14), after the v2 HumanEval collapse.** Compared every training format with
 the graded harness code (`inspect_evals` mbpp/humaneval, `tinker_cookbook/eval/inspect_utils.py`). Bugs found,
