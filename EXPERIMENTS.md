@@ -146,6 +146,35 @@ Next: put the pool into `select.py` behind a flag and run preflight; then the fu
 
 ---
 
+## v4: IF-RLVR, OpenCodeInstruct, Astra second solutions on hard math (done; 2026-11-15)
+
+**Results.** Checkpoint `tinker://59ce19da-5ae9-5392-93a1-01e8626fb70f:train:0/sampler_weights/v4`
+(53,997 examples, 30.2M tokens, 1,688 steps, rank 32, lr 4.73e-4; ~$44 train + ~$4 evals).
+
+| | IFEval | MATH-500 | MBPP | Sum | Dev math | Dev code | IF seen / unseen / new | MATH rest | HumanEval |
+|---|---|---|---|---|---|---|---|---|---|
+| v1 | 72.0 | 70.0 | 75.1 | 217.1 | 67.7 | 74.5 | 66.4 / 52.9 / - | 70.8 | 67.1 |
+| v3 | 69.4 | 72.0 | 73.5 | 214.9 | 70.5 | 75.7 | 70.5 / 50.3 / 42.5 | 71.8 | 67.7 |
+| v4 | **75.9** | 71.8 | 73.2 | **220.9** | **71.4** | 70.3 | 66.6 / 51.0 / 43.4 | 71.4 | **75.6** |
+
+- **IF:** public up 3.9 over v1 (prompt strict 70.1, loose 73.0, inst strict 79.3, loose 81.4), about 2 stderr.
+  Dev IF is flat (paired vs v3: won 44, lost 45); unseen types +0.7, new types +0.9. The IF-RLVR data moved the
+  public benchmark more than our held-out-style dev types.
+- **Math:** flat. MATH-500 71.8 (v3 72.0), dev 71.4 (paired vs v3: won 25, lost 22), level 5 44/99 (v3 47).
+  Median output 190 tokens: the Astra second solutions did not make the model reason longer or better.
+- **Code:** MBPP 73.2 (v1 75.1, within the 2.8 stderr); dev code 70.3 (paired vs v3: won 25, lost 39, z = -1.75,
+  not significant at 2 sigma); HumanEval 75.6 (+7.9, best so far). Dev code tasks come from the same generator
+  as our own code tasks, whose share fell from 6,600 to 4,112 as OCI came in; failures are logic slips, not
+  format. OCI seems to help general code (HumanEval) and cost in-distribution code.
+- **Against my estimates:** IFEval 75-78 predicted, got 75.9; math 72-74 predicted, got 71.8; MBPP 75-77
+  predicted, got 73.2.
+
+**Acceptance rule.** Targeted area (IF) gained on public; no area dropped beyond 2 sigma (code dev -1.7 sigma vs
+v1, MBPP within noise). Best public sum and best held-out code proxy. v4 passes the rule against v1; switching
+the submission is the user's decision.
+
+---
+
 ## v3: v2 math and IF, harness-safe direct code (done; v1 stays the submission for now)
 
 **Results (2026-11-14).** Checkpoint `tinker://eeaf81d9-4d1b-5838-a910-46acab06c548:train:0/sampler_weights/v3`.
