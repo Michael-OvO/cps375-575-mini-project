@@ -333,3 +333,23 @@ Pilot data is in `data/sd_*`.
 ## base
 
 Untrained model. The math score is low (15.8) because it rarely stops before the 4,096-token cap. Handout numbers: 47.5 / 17.0 / 63.8.
+
+## rl1: bad-case analysis before RL (2026-11-16)
+
+Diagnosis only; public items are never used to choose training prompts. Per-item public results across v1–v4
+(inspect logs):
+
+| Benchmark | v4 | v4-wrong but solved by an earlier version | Never right in any version | Ceiling if all once-solved |
+|---|---|---|---|---|
+| MATH-500 | 71.8 | 61 items (12.2 pts), mostly level 3–4 | 80 (52 at level 5) | 84.0 |
+| MBPP | 73.2 | 30 (11.7 pts) | 39 | 84.8 |
+| IFEval prompt-strict | 70.1 | 73 (13.5 pts) | 89 | 83.5 |
+
+- IFEval v4 failures are mostly counting constraints: keywords:frequency 24/42, number_words 23/52,
+  forbidden_words 17/49, number_sentences 17/52, letter_frequency 16/33, capital_word_frequency 12/25.
+- Our IF verifier agrees with the official prompt-strict on 541/541 v4 items.
+- Dev flips across v1/v3/v4: math 22%, code 27%, IF 33% of items. These are the 0 < p < 1 items RL
+  sharpening can fix.
+- An independent review of the RL spec found 6 critical issues (macOS RLIMIT_AS, stub-test wording, IF verifier
+  routing, IF gate false positives, per-prompt bands, harness-safe code) plus high/medium ones. All are fixed
+  in spec v3 (`docs/superpowers/specs/2026-11-16-rl-design.md`).
