@@ -307,6 +307,10 @@ def main() -> None:
     teachers.check_configured([TEACHER])
     out = DATA / f"if_rlvr.{TEACHER}.jsonl"
     items = full_items(args.limit) if args.command == "full" else pilot_items(args.limit)
+    if args.command == "full":  # prompts another teacher already answered (or tried) are not asked again
+        others = [p for p in DATA.glob("if_rlvr.*.jsonl") if p != out and ".retry." not in p.name]
+        tried = set().union(*(jsonl.done_ids(p) for p in others)) if others else set()
+        items = [i for i in items if i["id"] not in tried]
     if args.command == "retry":  # failed items again, with feedback, into a separate file
         items = retry_items(args.limit)
         out = DATA / f"if_rlvr.{TEACHER}.retry.jsonl"
