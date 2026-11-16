@@ -133,6 +133,14 @@ Next: put the pool into `select.py` behind a flag and run preflight; then the fu
   math_new 16,139, math_cells 1,134, code 4,112, oci 6,888, IF 8,725, if_rlvr 7,275, general 1,997.
   Preflight passed with three acknowledged intended changes (math share 57% -> 46%, OCI answers longer,
   OCI specs name the function).
+- **Data audit before training (2026-11-15).** Re-verified: all 7,275 IF-RLVR rows pass their constraints;
+  0 of 300 sampled Astra math answers wrong; 1 of 300 sampled code rows fails a hidden test (it uses `string`
+  at test level; hidden tests are not in training). Found in IF-RLVR answers and now filtered in
+  `select --v4` (`if_quality_problem`): checker-gaming label lines such as "Palindrome: level." (111),
+  answers under 4 words (244), degenerate repetition from absurd constraint mixes (27), more than 5 copies of
+  one answer (115). Rebuilt v4: 53,997 examples (IF-RLVR 6,832, other IF 9,168), 30.2M tokens, ~$44;
+  preflight passed. Known residue: a few dozen terse or templated IF answers; random constraint mixes
+  sometimes force unrelated keywords into an answer (as IFEval's own prompts do).
 
 **Budget:** Tinker account A ~$112 spent of ~$250.
 

@@ -451,7 +451,8 @@ def test_v4_puts_if_rlvr_rows_first_and_records_source(env):
     rl_ids = [i for i in (f"if-rl-{k}" for k in range(400))
               if not is_dev(i[len("if-"):], select.IF_DEV_PER_MILLE)][:6]
     rlvr = [{"id": iid, "task": f"Describe gadget {k} for a reader.", "prompt": f"Describe gadget {k}. No commas.",
-             "constraints": [{"id": "punctuation:no_comma", "kwargs": None}], "response": "fine " * 20,
+             "constraints": [{"id": "punctuation:no_comma", "kwargs": None}],
+             "response": f"Gadget {k} is small and light and it folds flat for travel in any bag.",
              "teacher": "codex", "style": "if_rlvr"} for k, iid in enumerate(rl_ids)]
     jsonl.write(select.DATA / "if_rlvr.codex.jsonl", rlvr[:4])
     jsonl.write(select.DATA / "if_rlvr.codex.retry.jsonl", rlvr[3:])  # one id in both files: kept once
@@ -460,3 +461,12 @@ def test_v4_puts_if_rlvr_rows_first_and_records_source(env):
     assert src["if_rlvr"]["count"] == 6 and src["if_rlvr"]["dataset"] == "allenai/IF_multi_constraints_upto5"
     assert src["instruction_following"]["count"] == 2
     assert manifest["dropped_by_task"]["ifeval"]["duplicate"] == 1
+
+
+def test_if_quality_problem_flags_gaming_and_degenerate_answers():
+    ok = "Gardens bring neighbours together because shared work builds trust over a season."
+    assert select.if_quality_problem(ok, 0) is None
+    assert select.if_quality_problem("Y", 0) == "too_short"
+    assert select.if_quality_problem(ok + "\n\nPalindrome: level.", 0) == "label_line"
+    assert select.if_quality_problem("leave " + "ZAMBIE " * 40, 0) == "degenerate"
+    assert select.if_quality_problem("My answer is yes.", 5) == "repeated_answer"

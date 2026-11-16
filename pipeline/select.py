@@ -12,6 +12,7 @@ import argparse
 import json
 import random
 import re
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 from pipeline import formats, jsonl, leakage
@@ -120,6 +121,26 @@ def harness_safe_pool(rows: list[dict], rng: random.Random) -> list[dict]:
     return [r for r in out if r is not None]
 
 
+# v4 IF quality filter (audit 2026-11-15 of the IF-RLVR answers): checker-gaming label lines such as
+# "Palindrome: level.", degenerate repetition from absurd constraint mixes, throwaway answers under 4 words,
+# and more than IF_MAX_SAME copies of one answer ("My answer is yes.").
+_LABEL_LINE = re.compile(r"(?im)^\W*(palindr\w*|pal[ií]ndromo|keyword)\s*:\s*\S")
+IF_MIN_WORDS, IF_MAX_SAME, IF_MAX_WORD_SHARE = 4, 5, 0.25
+
+
+def if_quality_problem(response: str, same_so_far: int) -> str | None:
+    words = re.findall(r"\w+", response.lower())
+    if len(words) < IF_MIN_WORDS:
+        return "too_short"
+    if _LABEL_LINE.search(response):
+        return "label_line"
+    if len(words) >= 30 and Counter(words).most_common(1)[0][1] / len(words) > IF_MAX_WORD_SHARE:
+        return "degenerate"
+    if same_so_far >= IF_MAX_SAME:
+        return "repeated_answer"
+    return None
+
+
 def if_example(row: dict) -> dict:
     return {"id": row["id"], "task": "instruction_following",
             "messages": formats.to_messages(row["prompt"], row["response"])}
@@ -209,7 +230,8 @@ MATH_SOURCES = ("math_train", "math_new", "v2_cells")
 TASKS = ("math", "code", "ifeval", "general")
 # Per-example task label written to train.jsonl and dropped.jsonl, by TASKS key.
 TASK_LABEL = {"math": "math", "code": "code", "ifeval": "instruction_following", "general": "general"}
-DROP_REASONS = ("invalid", "too_long", "too_long_response", "overlap", "dev_overlap", "dev_member", "duplicate")
+DROP_REASONS = ("invalid", "too_long", "too_long_response", "overlap", "dev_overlap", "dev_member", "duplicate",
+                "low_quality")
 
 
 def _valid(example: dict) -> bool:
@@ -328,6 +350,8 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
     dropped_rows: list[dict] = []
     dropped_by_task = {t: dict.fromkeys(DROP_REASONS, 0) for t in TASKS}
     tokens = 0
+    same_answer: Counter = Counter()
+    if_quality_drops: Counter = Counter()
 
     def drop(task: str, row: dict, reason: str) -> None:
         dropped_by_task[task][reason] += 1
@@ -344,6 +368,14 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
             if is_dev_member(task, row):
                 drop(task, row, "dev_member")
                 continue
+            if v4 and task == "ifeval":
+                answer = row["response"].strip()
+                problem = if_quality_problem(answer, same_answer[answer])
+                if problem:
+                    drop(task, row, "low_quality")
+                    if_quality_drops[problem] += 1
+                    continue
+                same_answer[answer] += 1
             ex = make(row)
             if not _valid(ex):
                 drop(task, row, "invalid")
@@ -424,6 +456,7 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
         "dev_overlap_filter_enabled": dev_filter is not None,
         "missing_pools": missing_pools, "missing_dev_files": missing_dev,
         "teachers": sorted(teachers),
+        "if_quality_drops": dict(if_quality_drops),
     }
     for task, short in shortfall.items():
         if short:
