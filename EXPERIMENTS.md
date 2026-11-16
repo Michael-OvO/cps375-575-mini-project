@@ -89,6 +89,32 @@ answers; 3 used a meta label (e.g. "Palindrome: level."). Codex at 24 parallel c
 ChatGPT backend; 8-12 is clean (403 now stops a run).
 Next: put the pool into `select.py` behind a flag and run preflight; then the full generation.
 
+**Comparison with a classmate's run (2026-11-15).** Their s1_a (9,600 examples: MATH-train 1,700, GSM8K
+1,500, OpenCodeInstruct 3,100, Tulu-3 persona IF 2,600, Tulu-3 no_robots/oasst1 700) vs our v1: IFEval 78.5 vs
+72.0, MATH-500 55.2 vs 70.0, MBPP 76.7 vs 75.1 (within the 2.6 stderr); sum 210.4 vs 217.1. Lessons:
+- IF: they trained on persona-style prompts with IFEval constraint types (we skipped Tulu's persona IF on
+  purpose); IF was 27% of their mix vs 17% of ours. Our long math reasoning also makes the model verbose (11%
+  of v1's IFEval answers hit the 1,024-token cap). v4 raises IF volume with the IF-RLVR pool, which comes
+  from the same AI2 persona-prompt family but with verified answers and 29 more constraint types.
+- Code: OCI alone matched our code score, so v4 adds OCI as a second code source.
+- Math: short GSM8K-style data costs 15 points on MATH-500; we keep our long-solution route.
+
+**v4 data (2026-11-15, in progress).** `select --v4` = v3 plus:
+- **IF-RLVR full** (`if_rlvr full`): 12,000 prompts, the 200 pilot prompts first, then 7,000 with new types
+  (round-robin over types) interleaved with 5,000 standard-type-only prompts (quotas by constraint count
+  1/2/3/4/5 = 1,200/2,000/1,300/420/80). Teacher: Sol via Codex, concurrency 8; 3 attempts with feedback.
+- **Astra pilot on the same IF items:** 38/60 kept (63%, Sol 62.5%), median 96 words (Sol 68). Throughput
+  ~2.8 items/min at concurrency 4; concurrency 10 with the Fast tier got 429s. Astra is not better than Sol on
+  IF, so Astra goes to math instead.
+- **math-hard** (`v2_teacher math-hard --teacher codex`, Astra + Fast, high effort, concurrency 3): the 39
+  MATH-train problems still unsolved, then a second independently written long solution for the 3,128
+  v1-failed hard problems (row id `<pid>-long-<model>`, so select keeps both solutions).
+- **OpenCodeInstruct** (`python -m pipeline.generate.oci`, shards 0/17/34): rows with OCI test score 1.0 and
+  5/5 judge scores, one plain function (classes dropped, usage prints and type hints removed), 15-250 word
+  spec, at least 4 asserts calling the function; deduplicated (exact plus MinHash), checked against the eval
+  sets, code dev and probes; reference code must pass all tests in our sandbox (3 visible, rest hidden). One-
+  shard test: 8,320 candidates of 100,000, 98% survive the harness-safe transform. No teacher calls.
+
 **Budget:** Tinker account A ~$112 spent of ~$250.
 
 ---
