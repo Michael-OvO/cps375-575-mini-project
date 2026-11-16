@@ -445,3 +445,18 @@ def test_v2_code_plan_row_keeps_full_response():
            "response": "Return 1.\n\n```python\ndef f():\n    return 1\n```"}
     ex = code_example(row, random.Random(0))
     assert ex["messages"][1]["content"] == row["response"]
+
+
+def test_v4_puts_if_rlvr_rows_first_and_records_source(env):
+    rl_ids = [i for i in (f"if-rl-{k}" for k in range(400))
+              if not is_dev(i[len("if-"):], select.IF_DEV_PER_MILLE)][:6]
+    rlvr = [{"id": iid, "task": f"Describe gadget {k} for a reader.", "prompt": f"Describe gadget {k}. No commas.",
+             "constraints": [{"id": "punctuation:no_comma", "kwargs": None}], "response": "fine " * 20,
+             "teacher": "codex", "style": "if_rlvr"} for k, iid in enumerate(rl_ids)]
+    jsonl.write(select.DATA / "if_rlvr.codex.jsonl", rlvr[:4])
+    jsonl.write(select.DATA / "if_rlvr.codex.retry.jsonl", rlvr[3:])  # one id in both files: kept once
+    manifest = build("t", {**SIZES, "ifeval": 8}, v4=True)
+    src = {s["name"]: s for s in manifest["sources"]}
+    assert src["if_rlvr"]["count"] == 6 and src["if_rlvr"]["dataset"] == "allenai/IF_multi_constraints_upto5"
+    assert src["instruction_following"]["count"] == 2
+    assert manifest["dropped_by_task"]["ifeval"]["duplicate"] == 1

@@ -32,6 +32,8 @@ ALLOWED_TRAIN_DATASETS = (
     "DigitalLearningGmbH/MATH-lighteval",
     "allenai/tulu-3-sft-mixture",
     "teacher-generated",
+    "allenai/IF_multi_constraints_upto5",  # v4: prompts and constraints only, re-answered by our teacher
+    "nvidia/OpenCodeInstruct",  # v4: staff-suggested; reference code kept only if our sandbox passes its tests
 )
 
 # Lower-case fragments that disqualify a training source by dataset id or source name.

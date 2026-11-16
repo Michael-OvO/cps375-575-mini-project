@@ -20,7 +20,7 @@ import random
 import re
 
 from pipeline import jsonl, teachers
-from pipeline.config import DATA, SEED
+from pipeline.config import DATA, GPT_MODEL, SEED
 from pipeline.constraints.sample import _build, group_of, render_prompt, sample_constraints
 from pipeline.generate import ifeval as gif
 from pipeline.generate.math import split_solution
@@ -120,6 +120,19 @@ def math_long_items(limit: int | None, correct_l5: int = 1000) -> list[dict]:
     return items[:limit]
 
 
+def math_hard_items(limit: int | None) -> list[dict]:
+    """v4 (second teacher): MATH-train problems with no verified solution yet, then the v1-failed hard problems
+    again, so each gets a second, independently written long solution."""
+    from pipeline.generate.math import load_train
+    solved = {r.get("pid", r["id"]) for r in jsonl.read(DATA / "math_train_solutions.jsonl")}
+    solved |= {r["pid"] for r in jsonl.read(MATH_LONG)}
+    unsolved = [dict(i, v1_correct=None, source="math_train", teacher=TEACHER) for i in load_train()
+                if not i["dev"] and i["id"] not in solved and not _GIVE_UP.search(i["target"])]
+    unsolved.sort(key=lambda i: -i["level"])
+    failed = [i for i in math_long_items(None) if i["v1_correct"] is False]
+    return (unsolved + failed)[:limit]
+
+
 async def math_long(item: dict) -> list[dict] | None:
     text = await teachers.get(TEACHER)(MATH_LONG_PROMPT.format(problem=item["problem"]), effort="high")
     if not text:
@@ -133,10 +146,12 @@ async def math_long(item: dict) -> list[dict] | None:
     ntok = student_tokens(f"{body}\n\nANSWER: {answer}")
     if not MATH_LONG_MIN_TOKENS <= ntok <= MATH_LONG_MAX_TOKENS:
         return []
-    return [{"id": f"{item['id']}-long", "pid": item["id"], "problem": item["problem"], "target": item["target"],
+    # A second teacher's solution must not share the first one's id (select keeps one row per id).
+    rid = f"{item['id']}-long" if TEACHER == "claude" else f"{item['id']}-long-{GPT_MODEL}"
+    return [{"id": rid, "pid": item["id"], "problem": item["problem"], "target": item["target"],
              "answer": answer, "solution": body, "level": item["level"], "source": item["source"],
              "subject": item.get("subject"), "v1_correct": item.get("v1_correct"), "student_tokens": ntok,
-             "style": "long", "teacher": TEACHER}]
+             "style": "long", "teacher": TEACHER, "model": GPT_MODEL if TEACHER != "claude" else None}]
 
 
 # ---------------------------------------------------------------- code-plan
@@ -277,7 +292,7 @@ async def if_new(item: dict) -> list[dict] | None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["math-long", "code-plan", "if-count", "if-new"])
+    p.add_argument("command", choices=["math-long", "math-hard", "code-plan", "if-count", "if-new"])
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=16)
     p.add_argument("--teacher", choices=["claude", "gpt", "codex"], default="claude",
@@ -287,6 +302,7 @@ def main() -> None:
     TEACHER = args.teacher
     teachers.check_configured([TEACHER])
     plan = {"math-long": (math_long_items, math_long, MATH_LONG),
+            "math-hard": (math_hard_items, math_long, MATH_LONG.with_name("v2_math_hard.jsonl")),
             "code-plan": (code_plan_items, code_plan, CODE_PLAN),
             "if-count": (if_count_items, if_count, IF_COUNT),
             "if-new": (if_new_items, if_new, IF_NEW)}[args.command]

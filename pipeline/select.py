@@ -5,6 +5,7 @@ Usage:
     python -m pipeline.select --name smoke --math 500 --ifeval 200 --code 200 --general 100
     python -m pipeline.select --name v2 --v2 --ifeval 8000 --code 7000   # adds the v2 pools (see build)
     python -m pipeline.select --name v3 --v3 --math 21700 --ifeval 8000 --code 6600   # v2 math/IF, direct code
+    python -m pipeline.select --name v4 --v4 --ifeval 14000 ...   # v3 plus the IF-RLVR pool first in IF
 """
 
 import argparse
@@ -230,13 +231,26 @@ def _check_counts(sources: list[dict], kept: list[dict]) -> None:
         raise ValueError(f"manifest source counts ({total}) do not match kept examples ({len(kept)})")
 
 
-def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = False, v3: bool = False) -> dict:
+def if_rlvr_pool(dupes: list[dict], missing: list[str]) -> list[dict]:
+    """v4: verified IF-RLVR answers from every teacher file (data/if_rlvr.<teacher>[.retry].jsonl), one per prompt."""
+    files = sorted(p.name for p in DATA.glob("if_rlvr.*.jsonl"))
+    if not files:
+        missing.append("if_rlvr.*.jsonl")
+    rows = [r for f in files for r in jsonl.read(DATA / f)]
+    return _unique_by_id(rows, dupes)
+
+
+def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = False, v3: bool = False,
+          v4: bool = False) -> dict:
     """v2=True adds the v2 pools ahead of the v1 ones: long math solutions replace short ones on the same
     problem, plan-first code answers replace direct ones on the same task, and the cell-targeted and new IF
     items come first. Sizes still cap each task.
     v3=True keeps the v2 math and IF pools but makes all code direct and harness-safe: the v1 direct tasks
     plus the HumanEval-style and long-spec cell tasks (code only, no plan), each passed through
-    harness_safe_code."""
+    harness_safe_code.
+    v4=True is v3 with the IF-RLVR pool (prompts from allenai/IF_multi_constraints_upto5, answers by our
+    teacher, checked by the vendored IFEvalG checkers) ahead of the other IF rows."""
+    v3 = v3 or v4
     v2 = v2 or v3
     rng = random.Random(SEED)
     dupes = {t: [] for t in TASKS}
@@ -252,13 +266,22 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
         rng.shuffle(pool)
 
     if v2:
-        math_pool = math_candidates_v2(math_train, math_new, _read_pool("v2_math_long.jsonl", dupes["math"], missing_pools),
+        long_rows = _read_pool("v2_math_long.jsonl", dupes["math"], missing_pools)
+        if v4:  # second-teacher long solutions: hard problems get two independently written solutions
+            long_rows = _unique_by_id(long_rows + [r for p in sorted(DATA.glob("v2_math_hard.*.jsonl"))
+                                                   for r in jsonl.read(p)], dupes["math"])
+        math_pool = math_candidates_v2(math_train, math_new, long_rows,
                                        _read_pool("v2_math_cells.jsonl", dupes["math"], missing_pools), rng)
         plans_ = _read_pool("v2_code_plan.jsonl", dupes["code"], missing_pools)
         cells_ = _read_pool("v2_code_cells.jsonl", dupes["code"], missing_pools)
         if v3:
             cells_ = [r for r in cells_ if r["cell"].get("prompt_style", "").startswith(V3_CELL_STYLES)]
-            code_pool = harness_safe_pool(cells_, rng) + harness_safe_pool(code_pool, rng)
+            cells_safe = harness_safe_pool(cells_, rng)  # this order keeps v3's selection reproducible
+            own = harness_safe_pool(code_pool, rng)
+            if v4:  # OCI tasks shuffled in with our own, after the cell tasks
+                own += harness_safe_pool(_read_pool("oci_tasks.jsonl", dupes["code"], missing_pools), rng)
+                rng.shuffle(own)
+            code_pool = cells_safe + own
         else:
             first = plans_ + cells_
             rng.shuffle(first)
@@ -268,6 +291,10 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
                   + _read_pool("v2_if_new.jsonl", dupes["ifeval"], missing_pools))
         rng.shuffle(new_if)
         if_pool = new_if + if_pool
+        if v4:
+            rlvr = if_rlvr_pool(dupes["ifeval"], missing_pools)
+            rng.shuffle(rlvr)
+            if_pool = rlvr + if_pool
     else:
         math_pool = math_candidates(math_train, math_new, rng)
     for row in math_pool:
@@ -281,13 +308,13 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
         "math": (math_pool, lambda r: math_example(r, rng), lambda r: r["problem"], lambda r: r["problem"],
                  lambda r: r["source"]),
         "code": (code_pool, lambda r: code_example(r, rng), lambda r: r["text"], lambda r: r["text"],
-                 lambda r: "code"),
+                 lambda r: "oci" if r.get("author") == "oci" else "code"),
         # Both overlap checks use the base task: the constraint wording is the checker library's own
         # template text, shared with every IFEval prompt of that type, and flagged ~8% of candidates
         # as false positives (smoke run, 2026-11-14). Rows without a base task fall back to the prompt
         # for the test-set check and skip the dev check.
         "ifeval": (if_pool, if_example, lambda r: r.get("task") or r["prompt"], lambda r: r.get("task"),
-                   lambda r: "instruction_following"),
+                   lambda r: "if_rlvr" if r.get("style") == "if_rlvr" else "instruction_following"),
         "general": (general_pool, general_example, _user_text, lambda r: None, lambda r: "general"),
     }
 
@@ -367,6 +394,12 @@ def build(name: str, sizes: dict, no_overlap_check_ok: bool = False, v2: bool = 
         {"name": "general", "dataset": "allenai/tulu-3-sft-mixture", "split": "train",
          "count": per_source.get("general", 0)},
     ]
+    if per_source.get("oci"):
+        sources.append({"name": "oci", "dataset": "nvidia/OpenCodeInstruct", "split": "train",
+                        "count": per_source["oci"]})
+    if per_source.get("if_rlvr"):
+        sources.append({"name": "if_rlvr", "dataset": "allenai/IF_multi_constraints_upto5", "split": "train",
+                        "count": per_source["if_rlvr"]})
     leakage.check_sources(sources)
     _check_counts(sources, kept)
 
@@ -415,13 +448,15 @@ def main() -> None:
     p.add_argument("--general", type=int, default=2000)
     p.add_argument("--v2", action="store_true", help="add the v2 pools (long math, plan code, cells, new IF)")
     p.add_argument("--v3", action="store_true", help="v2 math/IF pools, all code direct and harness-safe")
+    p.add_argument("--v4", action="store_true", help="v3 plus the IF-RLVR pool first in IF")
     p.add_argument("--no-overlap-check-ok", action="store_true",
                    help="a human has decided to use teacher-written math/code without the test-set overlap filter")
     args = p.parse_args()
     try:
         manifest = build(args.name, {"math": args.math, "ifeval": args.ifeval,
                                      "code": args.code, "general": args.general},
-                         no_overlap_check_ok=args.no_overlap_check_ok, v2=args.v2, v3=args.v3)
+                         no_overlap_check_ok=args.no_overlap_check_ok, v2=args.v2, v3=args.v3,
+                         v4=args.v4)
     except OverlapCheckNotDecided as exc:
         raise SystemExit(f"ERROR: {exc}") from None
     print(json.dumps(manifest, indent=2))

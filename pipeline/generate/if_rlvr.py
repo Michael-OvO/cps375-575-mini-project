@@ -27,7 +27,7 @@ import re
 from collections import Counter
 
 from pipeline import jsonl, leakage, teachers
-from pipeline.config import DATA, SEED
+from pipeline.config import DATA, GPT_MODEL, SEED
 from pipeline.constraints import ifevalg
 from pipeline.constraints.sample import STANDARD_IDS
 from pipeline.generate import ifeval as gif
@@ -207,6 +207,31 @@ def pilot_items(limit: int | None, seed: int = SEED) -> list[dict]:
     return out
 
 
+# Full run: prompts with only IFEval's own types (direct transfer to the graded set) next to prompts with new
+# types (generalization to the held-out set). Standard-only quotas lean to 2-3 constraints: single constraints
+# pass 94% of the time and teach little, and v1's own IF data already covers them.
+FULL_STANDARD = {1: 1200, 2: 2000, 3: 1300, 4: 420, 5: 80}
+FULL_NEW = 7000
+
+
+def full_items(limit: int | None, seed: int = SEED) -> list[dict]:
+    """Pilot items first (already answered, so a resume skips them), then the full quotas, interleaved."""
+    new = pilot_items(FULL_NEW, seed)
+    rng = random.Random(seed + 1)
+    std = [r for r in jsonl.read(PROMPTS) if not r["new_types"]]
+    rng.shuffle(std)
+    picked = []
+    for n, quota in FULL_STANDARD.items():
+        picked += [r for r in std if len(r["constraints"]) == n][:quota]
+    rng.shuffle(picked)
+    picked = [dict(r, teacher=TEACHER) for r in picked]
+    head, rest = new[:200], new[200:]
+    out = list(head)
+    for i in range(max(len(rest), len(picked))):  # interleave so a stopped run still has both kinds
+        out += rest[i:i + 1] + picked[i:i + 1]
+    return out[:limit] if limit else out
+
+
 ATTEMPTS = gif.ATTEMPTS
 FEEDBACK = """{prompt}
 
@@ -247,6 +272,7 @@ async def respond(item: dict) -> list[dict] | None:
         if all(results) and not too_long:
             return [{"id": f"if-{item['id']}", "task": item["task"], "prompt": item["prompt"],
                      "constraints": item["constraints"], "response": response, "teacher": TEACHER,
+                     "model": GPT_MODEL if TEACHER in ("codex", "gpt") else None,
                      "verifier": "ifevalg", "source": item["source"], "new_types": item["new_types"],
                      "attempts": attempt + 1, "style": "if_rlvr"}]
         broken = [describe(i, k) for i, k, ok in zip(ids, kwargs, results) if not ok]
@@ -267,7 +293,7 @@ def retry_items(limit: int | None) -> list[dict]:
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["pool", "respond", "retry"])
+    p.add_argument("command", choices=["pool", "respond", "retry", "full"])
     p.add_argument("--teacher", choices=["codex", "claude", "gpt"], default="codex")
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--concurrency", type=int, default=8)
@@ -280,7 +306,7 @@ def main() -> None:
     TEACHER, ATTEMPTS = args.teacher, args.attempts
     teachers.check_configured([TEACHER])
     out = DATA / f"if_rlvr.{TEACHER}.jsonl"
-    items = pilot_items(args.limit)
+    items = full_items(args.limit) if args.command == "full" else pilot_items(args.limit)
     if args.command == "retry":  # failed items again, with feedback, into a separate file
         items = retry_items(args.limit)
         out = DATA / f"if_rlvr.{TEACHER}.retry.jsonl"
