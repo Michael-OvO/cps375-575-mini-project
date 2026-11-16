@@ -1,0 +1,69 @@
+# 少调算法，多筛数据，再给 IF 加老师
+
+**结论先行：** 对我们这个配置（Qwen3.5-9B-Base + LoRA r32，已 SFT，约 100 步 × 64×8 rollouts，greedy 评测，约 $80 Tinker 预算），2025–2026 年各种 GRPO 变体里几乎没有值得换的。应该保留现有草案的核心：group-mean 中心化 advantage、不除 std、token-sum loss、不加 KL、丢弃 zero-variance group、同步 on-policy `importance_sampling` loss。原因很简单：DAPO clip-higher、GSPO、CISPO、GMPO 修的都是 off-policy、长序列或 MoE 路由噪声带来的问题，而每批 rollout 只做一步梯度更新时，importance ratio 基本等于 1，这些机制几乎不会触发。真正值钱的杠杆在数据和 reward 这一侧：按 post-SFT pass rate 筛 prompt（0.1–0.9，按 p(1−p) 加权，偏向 greedy 答错的题）、处理截断、扩展 IF 的反作弊 quality gate、code 坚持 binary reward 并配齐 hidden tests。On-policy distillation（OPD）是 2025–2026 年证据最强的新方法，Qwen3 和 Thinking Machines 都报告它用约 1/10 的算力就追平或超过了 RL。不过在我们的预算下，397B 老师打分会让每步成本大约翻倍，模板也对不上，而且一篇 2026 年的论文发现未经 RL 的原始老师迁移效果反而不如直接 GRPO。所以 OPD 应该作为"只在 IF group 上加 reverse-KL"的附加项，先过一次 $1–3 的预检再决定开不开，不要用它替代 RLVR。现实的增益预期是：IFEval +2 到 +5，MATH-500 和 MBPP 各 0 到 +3。每个 benchmark 约 500 题，噪声底约 ±2 pp，所以大部分 delta 都需要配对显著性检验，还要跑一个 spurious-reward 对照，才能当作真实结论。
+
+## 2025 年大多数 GRPO 变体在 100 步同步训练里不会生效
+
+这些变体真正修的是什么问题，决定了它们对我们有没有用。**DAPO** 引入了 clip-higher（ε_high 0.28）、dynamic sampling、token-level loss 和 overlong shaping，它的设定是 Qwen2.5-32B、20k 上下文、每步 512 prompts × 16 samples（[DAPO](https://arxiv.org/abs/2503.14476)）。**GSPO** 改用序列级 ratio，目的是稳定 MoE 和长序列训练（[GSPO](https://arxiv.org/abs/2507.18071)）。**CISPO** 对 IS 权重做截断加 stop-gradient，让低概率的"分叉 token"保留梯度，它是为 456B MoE、40k–80k 生成长度、off-policy minibatch 设计的（[MiniMax-M1](https://arxiv.org/abs/2506.13585)）。在 Meta 的 ScaleRL（ICLR 2026 oral，超过 40 万 GPU-hours）里，CISPO 和 GSPO 的渐近性能确实明显好于 DAPO。但它的设定是异步 PipelineRL，而且论文明确说，loss aggregation、advantage normalization、curriculum、length penalty 这类常见改动**主要影响效率，不影响上限**（[ScaleRL](https://arxiv.org/html/2510.13786v1)）。离我们最近的反面证据来自 "Tricks or Traps?"：在 Qwen3-4B/8B **base** 上，clip-higher 的 clip rate 只有约 0.003，作用很小，有时还有害；一个简单的 "Lite PPO"（group-mean + batch-std + token-level 聚合 + 普通 PPO loss）反而胜过 GRPO 和 DAPO（[Tricks or Traps](https://arxiv.org/html/2508.08221v2)）。
+
+落到 Tinker 上结论更直接。`importance_sampling` loss 本身不做 clipping，所以 clip-higher 是 no-op。REINFORCE 和 PPO loss 都没有 KL 项。RL loss 只接受 `target_tokens`、`logprobs`、`advantages` 三个输入，这意味着 entropy bonus 和 critic（VAPO）都没法直接实现（[Tinker losses](https://tinker-docs.thinkingmachines.ai/tinker/losses/)）。Tinker 官方的建议也是：RL 先用 `importance_sampling`，出现不稳定再换 `ppo` 或 `cispo`（[Tinker loss tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/core-concepts/loss-functions/)）。advantage 的写法基本不是需要做的决定。Dr. GRPO 指出，per-question std 归一化会引入难度偏差，per-response 长度归一化会让长的错误答案受罚不足（[Dr. GRPO](https://arxiv.org/html/2503.20783v2)）；ScaleRL 发现 prompt-level、batch-level 和不归一化三者表现相近。RLOO 的 leave-one-out baseline 在 G=8 时恰好等于 mean-centering 乘以 8/7，会被学习率吸收。真正值得偏离草案的只有一点：IF 用的是部分得分，math 和 code 是 0/1，尺度不同；**按 domain 做 batch-level std 归一化**，可以在不引入 per-prompt 难度偏差的前提下平衡三个域的梯度贡献。
+
+LoRA 本身不是瓶颈。Thinking Machines 的 "LoRA Without Regret" 显示，policy-gradient RL 下 rank 1 就能追平 full FT（每个 episode 大约只学到 O(1) bit），最优 LoRA 学习率约为 full FT 的 10 倍，而且 LoRA 必须覆盖 MLP 层。他们用的算法就是 IS + group-mean centering，和我们的草案完全一样（[LoRA Without Regret](https://thinkingmachines.ai/blog/lora/)）。full-FT RLVR 常用 lr 1e-6，乘 10 得到 1e-5，所以计划中的 2e-5 偏激进但合理。在 100 步的训练里，LR 很可能是影响最大的单个超参。熵坍缩也不必刻意对抗。Cui et al. 发现性能增益和熵的消耗同步发生（[Entropy Mechanism](https://arxiv.org/html/2505.22617v1)）；80/20 forking-token 方法在 32B 上提升很大，在 8B 上基本为零（[80/20](https://arxiv.org/html/2506.01939v2)）；NSR/W-REINFORCE 保住的是 pass@k，而我们评测的是 pass@1（[Zhu et al.](https://arxiv.org/pdf/2506.01347)）。greedy 解码本身就是零温度极限，把概率质量收拢到正确的 mode 上，正是 greedy 分数提升的来源。
+
+## 数据选择和 reward 卫生比算法选择更值钱
+
+既然算法已经不是变量，预算就该花在让每个 group 都有梯度上。G=8、binary reward 时，真实 pass rate 为 p 的 prompt 出现 zero-variance group 的概率是 p⁸+(1−p)⁸：p=0.9 时为 43%，p=0.5 时只有 0.8%。SFT 之后很多 math 和 IF prompt 已经接近饱和，所以**预先按 pass rate 筛题**是 $80 预算下性价比最高的操作。几条证据都指向同一个方向。按 learnability p(1−p) 采样，在 PPO 和 VinePPO 上都有稳定提升（[Foster et al.](https://arxiv.org/abs/2502.12272)）。ScaleRL 的最终 recipe 包含 zero-variance filtering 和 No-Positive-Resampling，也就是把 pass rate ≥ 0.9 的题永久移出（[ScaleRL](https://arxiv.org/html/2510.13786v1)）。POLARIS 把难度分布设成略偏难的 mirrored-J，并在训练中发现整体难度会逐渐变简单，需要重新筛题（[POLARIS](https://hkunlp.github.io/blog/2025/Polaris)）。GRESO 报告，过去持续 zero-variance 的 prompt 有 90% 以上会继续保持 zero-variance，提前跳过它们最多可节省 3.35 倍 rollout（[GRESO](https://arxiv.org/html/2506.02177v1)）。在 IF 上，IFDecorator 只保留 pass rate 在 (0, 0.5] 的 3.6k 条 prompt，去掉这个过滤后 IFEval 从 83.73 掉到 79.11（[IFDecorator](https://arxiv.org/html/2508.04632v2)）。具体做法：丢弃 zero-variance group 但不花钱补采（预算固定时，接受较小的有效 batch 更划算）；每步记录有效 batch size；在第 50–60 步左右重新校准一次 pool。
+
+截断处理需要明确一个规则。DAPO 发现，对截断样本硬罚分会引入 reward 噪声，把它们从 loss 中 mask 掉更稳定（[DAPO](https://arxiv.org/pdf/2503.14476)）。Tulu 3 则对没有 EOS 的回复给 −10（[Tulu 3](https://arxiv.org/html/2411.15124)）。两者并不矛盾：DAPO 的场景是 20k 长 CoT，截断多半是"还没想完"；我们的 IF 上限是 1,024 tokens，截断更可能是重复或跑题。所以建议 IF 上截断记 0 分，math 和 code 上 mask 掉截断样本，并在每个 checkpoint 上记录 greedy 评测的截断率和重复率。greedy 比 T=1 采样更容易陷入重复循环，这是短期训练里比熵坍缩更现实的失败模式。
+
+IF reward 的最大风险是作弊。IFDecorator 记录的作弊行为包括：照抄占位符或模板（"[name]"）、凑数的空 bullet、"p p p" 式重复、只有分隔符没有内容的 section。他们用 IntentCheck 和规则 verifier 取 AND，把 hack rate 从 14.53% 降到 7.60%，并用不参与 reward 的 trip-wire prompt 单独测量作弊率（[IFDecorator](https://arxiv.org/html/2508.04632v2)）。AdvancedIF 还观察到"这是一个完美满足所有要求的回答"这类自我夸奖，以及被截断的回复（[AdvancedIF](https://arxiv.org/html/2511.10507)）。我们现有的 quality gate 应该补上这些模式，尤其是 length 和 keyword 两类约束。IFBench 的 leave-one-out 显示，这两类对 IFEval 分数贡献最大（[IFBench](https://arxiv.org/html/2507.02833)），同时它们也最容易被钻空子。prompt pool 的设计同样来自 IFBench：每条 prompt 2–3 个约束（OOD 上 3 个最好，1 个最差）、变量取值范围宽于测试范围、每种约束类型超过 50–100 个实例就不再有收益，所以预算应该花在增加约束类型上。我们 dev 集上 unseen 约 51、seen 约 67 的差距，本质是约束类型覆盖不足。LLM judge 做 soft-constraint reward 不建议用：VerIF 认为有帮助（[VerIF](https://arxiv.org/html/2506.09942v1)），但 "Precision over Diversity" 发现低召回的 judge 会导致严重 reward hacking（[2601.04954](https://arxiv.org/abs/2601.04954)），而且两者都不是在 9B LoRA 上测的。
+
+Code 应该保持 **binary 全过**。唯一一项受控研究发现，pass-rate reward 并不比 binary 更好，Qwen3-4B 收敛时 binary 的 pass@1 更高（[2605.02944](https://arxiv.org/html/2605.02944v1)）。部分得分只在大多数 group 全为 0 时才有用，可以作为 warm-up（[2509.21016](https://arxiv.org/pdf/2509.21016)），而我们的 MBPP 已经在 73%，不属于这种情况。AceReason、DeepCoder 和 AceCoder 都要求每题至少约 5 个经过参考解验证的测试，并剔除测试太弱的题（[AceReason](https://arxiv.org/html/2505.16400v3)、[AceCoder](https://arxiv.org/html/2502.01718v4)）。我们的 asserts 写在 prompt 里，最可能出现的作弊是针对可见 asserts 做 special-casing，所以"可见 asserts 通过但 hidden 失败"的比例应该作为作弊监控指标。多域混合方面，最接近我们设定的是 "To Mix or To Merge"：Qwen3-4B-Base 经过 SFT，用混合 batch、binary reward，结果显示域间干扰很小，算力只需分开训练的约 1/3（[2602.12566](https://arxiv.org/html/2602.12566v1)）。因此一个混合 batch 是合理的默认选择。也有研究在 Qwen2.5-7B 和 Llama-3.1-8B 上报告了 math/chat/IF 之间的梯度冲突（[2602.02301](https://arxiv.org/html/2602.02301)），两者都是 preprint，分歧尚未解决。
+
+## On-policy distillation 是最强的新方法，但只适合当 IF 的附加项
+
+OPD 的机制很简单：从学生采样，让老师对每个 token 打分，per-token advantage 等于 −(log p_student − log p_teacher)，discount 设为 0，再代入同一个 IS loss。Thinking Machines 报告的结果是：Qwen3-8B-Base 先 SFT 到 AIME'24 60%，再经过约 150 步 OPD 达到约 70%，而 RL 只到 68%。另一个结果和我们直接相关：一个模型经过 mid-training 后 IFEval 从 85% 掉到 79%，用原 Qwen3-8B 当老师做约 100 步 OPD，恢复到了 83%，而用模型自己的 T=1 样本训练，在所有可行学习率下都会让 IFEval 下降（[On-Policy Distillation](https://thinkingmachines.ai/blog/on-policy-distillation/)）。Qwen3 报告也给出了相同方向的结论：从同一 checkpoint 出发，OPD 用 1,800 GPU-h 达到 AIME'24 74.4，RL 用 17,920 GPU-h 只到 67.6（[Qwen3](https://arxiv.org/abs/2505.09388)）。2026 年的趋势是把稠密的老师信号和稀疏的 outcome reward 结合起来。MiMo-V2-Flash 的 MOPD 使用 A_t = sg[log π_teacher/π_θ] + α·A_GRPO，学生在 AIME'25 上从 89.3 提到 94.1，超过了最好的老师（93.9）（[MiMo-V2-Flash](https://arxiv.org/html/2601.02780v1)）。cookbook 里的 `train_on_policy.py` 本身就会把 KL advantage 加到环境 advantage 上，所以 RLVR + OPD 的混合基本只是改配置。而且 cookbook 当前默认的学生正是 Qwen3.5-9B-Base（[Tinker distillation recipe](https://tinker-docs.thinkingmachines.ai/cookbook/recipes/distillation/)）。
+
+问题出在我们的具体条件上，有三处。**第一是成本。** Qwen3.5-397B-A17B 的 prefill 价格为 $1.65/M（命中缓存 $0.33/M），9B 训练价格为 $1.463/M（[Tinker pricing](https://tinker-docs.thinkingmachines.ai/tinker/models/models_and_pricing/)）。按 64×8、每步约 30 万训练 token 估算，老师打分约 $0.50/步；constant group 现在也带 KL 信号，不能再丢，训练费用从约 $0.31 升到约 $0.44。每步合计约 $1.05–1.10，而纯 RLVR 约 $0.45（项目 spec 的估算）。$55 的预算只够约 50 步全量混合训练。**第二是模板错配。** cookbook 让老师直接对学生的 token 序列打分，代码注释里提到，renderer 不同时需要自行改写。我们的学生用的是 `role_colon` base renderer，如果直接喂给 397B 的 chat/hybrid 模板，KL 主要反映的是"这不是我熟悉的格式"，而不是内容质量。**第三是老师未必更好。** Sparse-to-Dense 论文发现，未经 RL 的原始老师迁移效果不如直接 GRPO，只有经过 RL 强化的老师才能胜出（[2605.12483](https://arxiv.org/abs/2605.12483)）。"Does On-Policy Distillation Really Distill?" 发现，老师在学生轨迹上的监督噪声很大，而且随老师规模增大而增大；对低概率 token 施加固定负 advantage 就能追平 OPD（[2608.31046](https://arxiv.org/abs/2608.31046)）。Thinking Machines 自己也发现 8B 老师比 32B 略好（[TM blog](https://thinkingmachines.ai/blog/on-policy-distillation/)）。
+
+因此建议采用**分层方案**，由一次 $1–3 的预检决定走哪一层。预检内容：用 Qwen3.5 chat 模板以 non-thinking 模式（空 think block）重新渲染 prompt，并加一段说明我们答案格式的 system 提示；在已经付费采集的校准 rollouts 上，按任务计算 mean(log p_teacher − log p_student)，看它能否在组内区分 reward=1 和 reward=0 的样本；同时检查前 10 个 token 位置的 KL 是否异常偏高。**Plan A**（只在 IF 上能区分）：三个域照常做 RLVR，另外只在 IF group 上加 397B reverse-KL，约 $0.6/步，$55 内可跑约 90 步。系数 α 要标定到 KL 项约为 task advantage 的 0.3–1 倍。**Plan B**（math 也能区分）：KL 项同时覆盖 IF 和 math，约 $0.85/步，约 65 步。**Plan C**（预检失败，或模板问题一天内修不好）：按 spec 跑纯 RLVR 约 120 步，如果 IF 出现漂移，再加一个以 v4 为参照、β 有实际作用的 centered KL。不推荐纯 OPD，因为评测是按结果打分的，老师没有在我们的格式上验证过，而且纯 OPD 会浪费已经建好的 MBPP 和 math verifier。还有一个零规则风险的低价选项：用 v4 自己当 IF 的 KL reference，约 $0.03/步。它能防止 IF 退化，但不能增加能力。另外，必须先确认课程规则是否把"logprob 监督"算作使用老师，以及 397B 是否符合"更大模型"的要求。
+
+## 现实预期：每项 0–5 分，大多贴着 ±2 pp 的噪声底
+
+2025–2026 年的共识是，短程 RLVR 主要起**锐化**作用，而不是扩展能力。Yue et al.（NeurIPS 2025 oral）发现 RLVR 模型在小 k 时胜过 base，但在大 k 时 base 的 pass@k 更高，推理路径都没有超出 base 原有的采样分布（[NeurIPS](https://neurips.cc/virtual/2025/oral/119945)）。"RL Squeezes, SFT Expands"（ICLR 2026）的描述是：SFT 增加正确路径，RL 删减错误路径（[2509.21128](https://arxiv.org/abs/2509.21128)）。只有 ProRL 这类数千步训练，或 BroRL 那样每题 512 个 rollout，才观察到真正的能力扩展（[ProRL](https://arxiv.org/abs/2505.24864)、[BroRL](https://arxiv.org/pdf/2510.01180)）。对 greedy 评测来说，锐化恰好就是我们需要的效果：100 步训练应该理解为把 pass@8 转化成 pass@1。所以先测一次 SFT 模型在 T=1 下的 pass@8，它和 greedy 分数之间的差距就是 RL 可能拿到的空间上限，实际只能拿到其中一部分。RL's Razor（ICLR 2026）还说明 on-policy RL 天然倾向于离起点 KL 最近的解（[2509.04259](https://arxiv.org/pdf/2509.04259)），因此遗忘风险较小，主要风险来自 IF reward hacking 和长度漂移。
+
+各项的锚点数字如下。在已经调好的模型上，Tulu 3 8B 在 DPO 之后做 RLVR，结果是 IFEval 81.1 → 82.4、MATH 42.0 → 43.7、GSM8K 84.3 → 87.6（[Tulu 3](https://arxiv.org/html/2411.15124)）。Olmo 3 7B Instruct 的多域 RL 带来 IFEval +3.6、MBPP+ +4.3（[Olmo 3 card](https://huggingface.co/allenai/Olmo-3-7B-Instruct)）。在已经较强的 instruct coder 上，code RL 的增益是 MBPP +1 到 +4，HumanEval 可能 −1 到 +2，例如 AceCoder 在 Qwen2.5-Coder-7B-Instruct 上的 MBPP 82.8 → 84.1、HE 91.5 → 90.9（[AceCoder](https://arxiv.org/html/2502.01718v4)）。大幅提升只出现在专门的 IF-RLVR 中，比如 IFBench 把 Tulu-DPO-8B 的 IFEval 从 81.1 提到 92.2，但用了约 2,000 步、6–10 万条 prompt（[IFBench](https://arxiv.org/html/2507.02833)）；或者出现在 zero-RL 的 Qwen-Math 上。后者有明显问题：Qwen2.5-Math-7B 即使用**随机 reward**，MATH-500 也能涨 21.4 分（真实 reward 为 29.1），同样的随机 reward 在 Llama 上反而让分数下降（[Spurious Rewards, ICML 2026](https://proceedings.mlr.press/v306/shao26d.html)）；Qwen2.5-Math 只看到 MATH-500 题目的前 60%，就能以 54.6% 的精确匹配率补全剩余部分（[2507.10532](https://arxiv.org/html/2507.10532v2)）。
+
+| Benchmark | 当前 (v4) | 100 步 RLVR 预期 | 主要依据 | 备注 |
+|---|---|---|---|---|
+| IFEval | 75.9 | **+2 到 +5** | Tulu 3、Olmo 3、IFDecorator | 起点较低、IF 占比 40%，余量最大；需监控输出变短变简略 |
+| MATH-500 | 71.8 | **0 到 +3** | Tulu 3、spurious-reward 文献 | Qwen 家族可能存在污染，必须配随机 reward 对照 |
+| MBPP | 73.2 | **0 到 +3** | AceCoder、KodCode RL | HumanEval（164 题，SE 约 ±3.3）单次跑不可解读 |
+| OPD 附加项（Plan A） | – | 相对纯 RLVR **−1 到 +2 平均** | 推断，无直接来源 | 主要价值是防 IF 退化，不是加分 |
+
+这些区间都是从 500 步以上、full FT 的研究外推出来的。没有任何公开工作在"9B LoRA、100 步、math/code/IF 混合、greedy 评测"这个组合上画过曲线。500 题时二项标准误约为 sqrt(0.72·0.28/500) ≈ 2.0 pp，所以低于 2–3 pp 的变化需要做 McNemar 检验或按题 bootstrap 的配对检验。我们的模型已经 SFT 过，输出格式固定，spurious 效应应该远小于 zero-RL 场景，但它毕竟是 Qwen base。建议用同样的配置、同样的 prompts 和 seed，跑一个 Bernoulli(0.5) 随机 reward 的对照，约 30–40 步，成本约为主 run 的 25–35%。只有超出这个对照的那部分增益，才能算作 RL 从 verifier 中学到的东西。
+
+### 采纳 / 考虑 / 跳过 总表
+
+| 决策 | 方法 | 理由 |
+|---|---|---|
+| **采纳** | group-mean advantage、不除 std、token-sum、无 KL、同步 IS loss、LoRA lr 1–2e-5 | Dr. GRPO、ScaleRL、LoRA Without Regret；与 TM 的 LoRA RL 实验设定一致 |
+| **采纳** | pass-rate 0.1–0.9 预筛，按 p(1−p) 加权，偏向 greedy 答错的题；丢弃 zero-variance group 但不补采；中途重新校准 | 对 $80 预算最省钱；IFDecorator 中该过滤贡献 +4.6 IFEval |
+| **采纳** | 截断：IF 记 0 分，math/code mask 掉；记录 greedy 截断率和重复率 | DAPO、Tulu 3 |
+| **采纳** | 扩展 IF quality gate（占位符、空 bullet、重复、空 section、自我夸奖、keyword stuffing），取 AND；trip-wire 作弊率 | IFDecorator、AdvancedIF |
+| **采纳** | code 用 binary 全过；每题至少 5 个经验证 asserts，其中 2–3 个 hidden；用 stub 检测弱测试；记录可见通过但 hidden 失败的比例 | AceReason、AceCoder、2605.02944 |
+| **采纳** | spurious-reward 对照 + 配对显著性检验 + T=1 pass@8 监控 | Spurious Rewards、2507.10532 |
+| **考虑** | 按 domain 做 batch-std 归一化（IF 部分得分 vs 0/1） | Tricks or Traps、ScaleRL；唯一有理由偏离草案的估计器改动 |
+| **考虑** | 397B reverse-KL 仅加在 IF group 上（Plan A），由预检决定是否开启 | OPD、MOPD；成本和模板风险 |
+| **考虑** | 出现 ratio 尖峰时切换到 `cispo`/`ppo`；记录 p/q 和 sampler–trainer KL | Tinker 官方建议、FP16 mismatch 论文 |
+| **考虑** | code 占比从 20% 提到 25–30% | 2602.12566 用的是大致均等的比例 |
+| **跳过** | GSPO、clip-higher、GMPO、REINFORCE++、RLOO | 修的是 MoE、长序列、off-policy 问题，或在数学上等价 |
+| **跳过** | VAPO 等 critic 方法、entropy bonus、Clip-Cov/KL-Cov、80/20 | Tinker 接口不支持，或只在长训练、pass@k、大模型上有效 |
+| **跳过** | W-REINFORCE/NSR、Pass@k training | 优化的是 pass@k，和 greedy 目标相反 |
+| **跳过** | LLM-judge soft-constraint reward、learned code RM、纯 OPD | 容易被 hack，或浪费已有 verifier |
+
+## 结论
+
+这次调研最重要的认识转变是：2025 年那批算法论文主要解决的是"长跑和异步训练会不会崩"，而我们面对的是另一个问题：100 步内能不能把已经采样得到的正确答案变成 greedy 的 mode。对后者来说，每一美元的边际价值依次排在 prompt 难度校准、reward 的抗作弊精度、学习率上，然后才轮到 loss 形式。实验中最容易出现的误判不是选错算法，而是把格式锐化或 Qwen 特有的 spurious 效应当成学习成果，所以对照 run 和配对检验应该列入预算，而不是事后补做。
+
+On-policy distillation 是这个领域真正的新方向：稠密 token 信号加稀疏 outcome reward，正在成为前沿实验室训练小模型的标准做法。但它的收益依赖于老师和学生同风格、老师本身经过 RL 这两个条件，而我们一个都不完全满足。现实的做法是先花几美元验证 397B 的 per-token 信号能否在我们的格式上区分对错，能区分就只在 IF 上使用，主要用来防退化。如果这一步做成，它对报告的价值也许比分数更大：它会是一个关于"跨模板 OPD 在 9B LoRA 上是否有效"的小规模实证，而这正是现有文献缺少的数据点。
