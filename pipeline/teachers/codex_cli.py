@@ -25,6 +25,15 @@ _LIMIT = re.compile(r"usage limit|rate limit|limit reached|not logged in|log ?in
 # 403 Forbidden: the ChatGPT backend refuses new connections when too many run at once (seen at 24 parallel
 # calls, none at 8): stop the run rather than burn items; rerun at lower concurrency.
 _STRIPPED_ENV = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_API_KEY")
+# Connections refused while many open at once (403/429 from the websocket) are transient: wait and retry
+# the call; only a refusal that persists after all retries stops the run.
+_BUSY = re.compile(r"403 Forbidden|429 Too Many Requests", re.IGNORECASE)
+BUSY_RETRIES = 6
+# Minimum seconds between process launches in this process: a burst of simultaneous connections is what the
+# backend refuses, so launches are staggered.
+LAUNCH_GAP = float(os.environ.get("CODEX_LAUNCH_GAP", "1.0"))
+_launch_lock: asyncio.Lock | None = None
+_last_launch = 0.0
 # "priority" is Codex's Fast mode (about 2x speed, more plan usage per call); empty means the standard tier.
 SERVICE_TIER = os.environ.get("CODEX_TEACHER_TIER", "").strip()
 
@@ -75,11 +84,34 @@ def _record(usage: dict | None, failed: bool) -> None:
     USAGE["models"][GPT_MODEL] = USAGE["models"].get(GPT_MODEL, 0) + 1
 
 
+async def _stagger() -> None:
+    global _launch_lock, _last_launch
+    if _launch_lock is None:
+        _launch_lock = asyncio.Lock()
+    async with _launch_lock:
+        loop = asyncio.get_running_loop()
+        wait = _last_launch + LAUNCH_GAP - loop.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _last_launch = loop.time()
+
+
 async def complete(
     prompt: str, system: str | None = None, effort: str = "medium", max_tokens: int = 16000,
     timeout: float = 1800,
 ) -> str | None:
+    for attempt in range(BUSY_RETRIES + 1):
+        try:
+            return await _complete_once(prompt, system, effort, timeout)
+        except TeacherUnavailable as exc:
+            if attempt == BUSY_RETRIES or not _BUSY.search(str(exc)):
+                raise
+            await asyncio.sleep(min(300, 15 * 2 ** attempt))
+
+
+async def _complete_once(prompt: str, system: str | None, effort: str, timeout: float) -> str | None:
     # max_tokens: interface parity only; the CLI has no output cap flag.
+    await _stagger()
     text = f"{ANSWER_ONLY}\n\n{system}\n\n---\n\n{prompt}" if system else f"{ANSWER_ONLY}\n\n---\n\n{prompt}"
     with tempfile.TemporaryDirectory(prefix="codex_teacher_") as cwd:
         out_file = str(Path(cwd) / "last_message.txt")
