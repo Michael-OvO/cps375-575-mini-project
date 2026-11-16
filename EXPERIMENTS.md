@@ -115,6 +115,25 @@ Next: put the pool into `select.py` behind a flag and run preflight; then the fu
   sets, code dev and probes; reference code must pass all tests in our sandbox (3 visible, rest hidden). One-
   shard test: 8,320 candidates of 100,000, 98% survive the harness-safe transform. No teacher calls.
 
+**v4 generation results (2026-11-15).**
+- IF-RLVR: 729 prompts via Codex (Sol, then Sol Fast at 20 parallel with staggered launches), the other
+  11,268 via the OpenAI API (Sol, 120 parallel, ~290 prompts/min, no 429s): **7,706 kept (68%)**, 19,578 API
+  calls, 10.1M input + 12.2M output tokens, **~$142**. 101 of the first 3,479 answers exceed 900 tokens
+  (the 600-word cap misses them); select's 900-token filter drops them.
+- math-hard (Astra + Fast via Codex, 20 parallel once IF left Codex, ~45/min): **3,120 kept of 3,167**;
+  Astra solutions are shorter than Opus's on the same problem (median 767 vs 965 student tokens, max 1,583)
+  and textually different (median similarity 0.05). 1,125 of the first 1,128 are level 5.
+- Codex caps concurrent connections at about 22 per account (16 + 6 got 403s); launches are now staggered and
+  403/429 calls back off and retry.
+- **Qwen3.5-9B (instruct) on our harness**, thinking disabled, greedy: IFEval 35.2, MATH-500 19.6, MBPP 83.7.
+  IFEval and math are artifacts: it still writes "Thinking Process:" and hits the caps. Not used as a
+  teacher (no better than ours, possible MBPP-style training data, verbose).
+- **Final selection** (`select --name v4 --v4 --math 25000 --ifeval 16000 --code 11000`): 53,997 examples,
+  30.1M tokens, ~$44 to train; mix math 46%, IF 30%, code 20%, general 4%; sources math_train 7,727,
+  math_new 16,139, math_cells 1,134, code 4,112, oci 6,888, IF 8,725, if_rlvr 7,275, general 1,997.
+  Preflight passed with three acknowledged intended changes (math share 57% -> 46%, OCI answers longer,
+  OCI specs name the function).
+
 **Budget:** Tinker account A ~$112 spent of ~$250.
 
 ---
