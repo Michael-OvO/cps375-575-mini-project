@@ -8,6 +8,12 @@ CLEAN = [
     "def find_exit(grid):\n    return len(grid)",
     "import math\ndef f(x):\n    return math.sqrt(x)",
     "def f(xs):\n    return sorted(xs, key=lambda x: (x != 0, x))",
+    "def f(exit):\n    exit()",
+    "def f(xs):\n    builtins = [x for x in xs]\n    builtins.append(1)\n    return builtins",
+    "def f(xs):\n    builtins = []\n    builtins.x = 1\n    return builtins",
+    "def f(x):\n    print = x\n    return print",
+    "def f(o):\n    return getattr(o, 'system', None)",
+    "def f():\n    def quit():\n        return 1\n    return quit()",
     "class Stack:\n    def __init__(self):\n        self.items = []\n    def push(self, x):\n        self.items.append(x)",
 ]
 
@@ -35,6 +41,16 @@ DIRTY = {
     "AssertionError = Exception\ndef f():\n    pass": "assign:AssertionError",
     "import builtins\ndef f():\n    builtins.print = None": "assign:builtins.print",
     "import sys\ndef f():\n    return sys._current_frames()": "attr:_current_frames",
+    "class A:\n    pass\nA.__eq__ = lambda s, o: True": "assign:__eq__",
+    "def f(s, o):\n    return True\nA = type('A', (), {'__eq__': f})": "str:__eq__",
+    "class A:\n    pass\nsetattr(A, '__ne__', lambda s, o: False)": "str:__ne__",
+    "def print(*a):\n    pass": "def:print",
+    "class AssertionError(Exception):\n    pass": "def:AssertionError",
+    "import builtins\nbuiltins = None": "assign:builtins",
+    "import builtins as b\nb.print = None": "assign:builtins.print",
+    "import builtins\nsetattr(builtins, 'print', None)": "getattr:print",
+    "import os\ndef f():\n    return getattr(os, 'system')": "getattr:system",
+    "def f():\n    exit()\ndef g(exit):\n    pass": "call:exit",
 }
 
 

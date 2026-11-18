@@ -12,8 +12,11 @@ FRAME_ATTRS = {"f_back", "f_locals", "f_globals", "f_code", "tb_frame", "gi_fram
                "_getframe", "_current_frames", "walk_stack", "extract_stack", "currentframe", "settrace",
                "setprofile"}
 EQ_NAMES = {"__eq__", "__ne__"}
-REBIND_NAMES = {"builtins", "__builtins__", "print", "AssertionError"} | EQ_NAMES
-STRING_ATTRS = FRAME_ATTRS | EQ_NAMES | {"exit", "_exit", "kill", "system"}
+REBIND_NAMES = {"print", "AssertionError"}
+MODULE_ATTRS = {"exit", "_exit", "kill", "system", "print", "AssertionError"}
+GATED_MODULES = {"os", "sys", "builtins", "__builtins__"}
+SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+LOCAL_OK = {"exit", "quit"}
 
 
 def _dotted(node: ast.AST, aliases: dict[str, str]) -> str:
@@ -25,17 +28,68 @@ def _dotted(node: ast.AST, aliases: dict[str, str]) -> str:
     return ""
 
 
+def _root(node: ast.AST) -> str:
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else ""
+
+
+def _bound(scope: ast.AST) -> set[str]:
+    """Names bound directly in a scope (arguments, assignments, defs), not in nested scopes."""
+    names: set[str] = set()
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        a = scope.args
+        for arg in a.posonlyargs + a.args + a.kwonlyargs + [x for x in (a.vararg, a.kwarg) if x]:
+            names.add(arg.arg)
+    stack = list(ast.iter_child_nodes(scope))
+    while stack:
+        n = stack.pop()
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(n.name)
+            continue
+        if isinstance(n, ast.Lambda):
+            continue
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+            names.add(n.id)
+        stack.extend(ast.iter_child_nodes(n))
+    return names
+
+
 def violations(code: str) -> list[str]:
     try:
         tree = ast.parse(code)
     except SyntaxError:
         return ["syntax"]
     aliases: dict[str, str] = {}
+    builtins_names: set[str] = {"__builtins__"}
+    parent: dict[ast.AST, ast.AST] = {}
     for n in ast.walk(tree):
+        for c in ast.iter_child_nodes(n):
+            parent[c] = n
         if isinstance(n, ast.Import):
             for a in n.names:
                 if a.asname:
                     aliases[a.asname] = a.name
+                if a.name == "builtins":
+                    builtins_names.add(a.asname or "builtins")
+
+    def scopes(n: ast.AST) -> list[ast.AST]:
+        out = []
+        while n in parent:
+            n = parent[n]
+            if isinstance(n, SCOPES):
+                out.append(n)
+        return out
+
+    def locally_bound(n: ast.AST, name: str) -> bool:
+        return any(name in _bound(s) for s in scopes(n)) or name in _bound(tree)
+
+    def module_level(n: ast.AST) -> bool:
+        return not scopes(n)
+
+    def gated(arg: ast.AST) -> bool:
+        return _dotted(arg, aliases).split(".")[0] in GATED_MODULES
+
     out: set[str] = set()
     for n in ast.walk(tree):
         if isinstance(n, ast.Import):
@@ -51,24 +105,41 @@ def violations(code: str) -> list[str]:
                     out.add(f"from:{mod}.{a.name}")
         elif isinstance(n, ast.Call):
             name = _dotted(n.func, aliases)
-            if name in BANNED_CALLS:
+            if name in BANNED_CALLS and not (name in LOCAL_OK and locally_bound(n, name)):
                 out.add(f"call:{name}")
             if name in {"getattr", "setattr", "delattr"}:
                 for arg in n.args[1:2]:
-                    if isinstance(arg, ast.Constant) and arg.value in STRING_ATTRS:
+                    if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+                        continue
+                    if name == "setattr" and arg.value in EQ_NAMES:
+                        out.add(f"str:{arg.value}")
+                    elif arg.value in FRAME_ATTRS:
                         out.add(f"getattr:{arg.value}")
+                    elif arg.value in MODULE_ATTRS and n.args and gated(n.args[0]):
+                        out.add(f"getattr:{arg.value}")
+        elif isinstance(n, ast.Dict):
+            for k in n.keys:
+                if isinstance(k, ast.Constant) and k.value in EQ_NAMES:
+                    out.add(f"str:{k.value}")
         elif isinstance(n, ast.Attribute) and n.attr in FRAME_ATTRS:
             out.add(f"attr:{n.attr}")
-        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in EQ_NAMES:
-            out.add(f"def:{n.name}")
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if n.name in EQ_NAMES or (n.name in REBIND_NAMES and module_level(n)):
+                out.add(f"def:{n.name}")
         elif isinstance(n, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
             targets = n.targets if isinstance(n, ast.Assign) else [n.target]
             for t in targets:
                 for sub in ast.walk(t):
-                    if isinstance(sub, ast.Name) and sub.id in REBIND_NAMES:
-                        out.add(f"assign:{sub.id}")
+                    if isinstance(sub, ast.Name):
+                        if sub.id in EQ_NAMES:
+                            out.add(f"assign:{sub.id}")
+                        elif sub.id in REBIND_NAMES and module_level(n):
+                            out.add(f"assign:{sub.id}")
+                        elif sub.id in builtins_names:
+                            out.add(f"assign:{sub.id}")
                     elif isinstance(sub, ast.Attribute):
-                        name = _dotted(sub, aliases)
-                        if name.startswith(("builtins.", "__builtins__.")):
-                            out.add(f"assign:{name}")
+                        if sub.attr in EQ_NAMES:
+                            out.add(f"assign:{sub.attr}")
+                        elif _root(sub) in builtins_names:
+                            out.add(f"assign:{_dotted(sub, aliases)}")
     return sorted(out)
