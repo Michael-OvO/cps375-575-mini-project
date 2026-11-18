@@ -132,3 +132,10 @@ def test_disk_fill_killed():
             "    time.sleep(0.05)\nprint('done')")
     r = run_program(prog)
     assert "done" not in r.stdout and r.returncode != 0 and r.over_memory
+
+
+def test_disk_fill_in_subdirectory_killed():
+    prog = ("import os, time\nos.mkdir('d')\nfor i in range(40):\n"
+            "    open(f'd/f{i}', 'wb').write(b'x' * (4 << 20))\n    time.sleep(0.05)\nprint('done')")
+    r = run_program(prog)
+    assert "done" not in r.stdout and r.returncode != 0 and r.over_memory

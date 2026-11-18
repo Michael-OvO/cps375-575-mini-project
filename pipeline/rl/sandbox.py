@@ -72,10 +72,20 @@ def _ancestors(paths) -> str:
 
 
 def _dir_size(path: str) -> int:
+    """Total lstat size of everything under path, recursing into subdirectories, never following symlinks."""
     total = 0
-    for entry in os.scandir(path):
+    stack = [path]
+    while stack:
         try:
-            total += entry.stat(follow_symlinks=False).st_size
+            with os.scandir(stack.pop()) as it:
+                for entry in it:
+                    try:
+                        st = entry.stat(follow_symlinks=False)
+                        total += st.st_size
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+                    except OSError:
+                        pass
         except OSError:
             pass
     return total
