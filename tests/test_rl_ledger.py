@@ -32,3 +32,35 @@ def test_billing_sync_dominates_when_higher(tmp_path):
 
 def test_missing_ledger_is_zero(tmp_path):
     assert L.Ledger(tmp_path / "none.jsonl", cap_usd=1.0).total() == 0.0
+
+
+def test_billing_windows_are_hour_aligned(monkeypatch):
+    import sys
+    import types
+    from datetime import datetime, timedelta, timezone
+
+    calls = []
+
+    class Resp:
+        data = [types.SimpleNamespace(estimated_cost_usd=1.0), types.SimpleNamespace(estimated_cost_usd=None)]
+
+    class Fut:
+        def result(self):
+            return Resp()
+
+    class FakeAdmin:
+        def get_billing_usage(self, a, b):
+            calls.append((a, b))
+            return Fut()
+
+    monkeypatch.setitem(sys.modules, "tinker", types.SimpleNamespace(AdminClient=FakeAdmin))
+    start = datetime(2026, 11, 1, 3, 25, 41, 123, tzinfo=timezone.utc)
+    end = datetime(2026, 11, 20, 9, 5, tzinfo=timezone.utc)
+    total = L.billing_spend(start, end)
+    assert len(calls) == 2 and total == pytest.approx(2.0)
+    assert calls[0][0] == datetime(2026, 11, 1, 3, tzinfo=timezone.utc)
+    assert calls[-1][1] == datetime(2026, 11, 20, 10, tzinfo=timezone.utc)
+    for a, b in calls:
+        assert a.minute == a.second == a.microsecond == 0
+        assert b.minute == b.second == b.microsecond == 0
+        assert timedelta(0) < b - a <= timedelta(days=14)

@@ -53,11 +53,17 @@ class Ledger:
 
 
 def billing_spend(start: datetime, end: datetime | None = None) -> float:
-    """Actual Tinker spend in [start, end), summed over the API's 14-day maximum windows."""
+    """Actual Tinker spend in [start, end), summed over the API's 14-day maximum windows.
+    The API needs UTC-hour-aligned bounds: start is floored and end is ceiled to the hour, which can only
+    overcount slightly, the safe direction for a cap."""
     import tinker
 
     admin = tinker.AdminClient()
     end = end or datetime.now(timezone.utc)
+    start = start.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    end = end.astimezone(timezone.utc)
+    floor = end.replace(minute=0, second=0, microsecond=0)
+    end = floor if floor == end else floor + timedelta(hours=1)
     total, t = 0.0, start
     while t < end:
         u = min(t + timedelta(days=14), end)
