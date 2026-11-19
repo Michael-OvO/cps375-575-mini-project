@@ -156,3 +156,17 @@ def test_main_validates_dev_files_before_creating_sampler(data_dir, tmp_path, mo
     monkeypatch.setattr(sys, "argv", ["dev_eval", "--out", str(tmp_path / "out.json")])
     with pytest.raises(FileNotFoundError, match="if_dev.jsonl"):
         dev_eval.main()
+
+
+def test_score_items_collects_items():
+    import asyncio
+    from pipeline import dev_eval
+
+    class FakeSampler:
+        async def answer(self, prompt, max_tokens, temperature=0.0, n=1):
+            return ["ANSWER: 4"]
+
+    items = []
+    res = asyncio.run(dev_eval.score_items(FakeSampler(), [{"id": "m1", "problem": "2+2", "target": "4"}], [], [],
+                                           items=items))
+    assert res["math"] == 1.0 and items == [{"task": "math", "id": "m1", "correct": True, "output": "ANSWER: 4"}]

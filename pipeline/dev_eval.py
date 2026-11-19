@@ -33,25 +33,38 @@ def if_metric(scores: list[dict]) -> float:
     return sum(parts) / 4
 
 
-async def score_items(sampler, math: list[dict], code: list[dict], ifd: list[dict]) -> dict:
+async def score_items(sampler, math: list[dict], code: list[dict], ifd: list[dict],
+                      items: list | None = None) -> dict:
+    """Aggregate dev metrics; when `items` is a list, one row per scored item is appended to it."""
     sem = asyncio.Semaphore(CONCURRENCY)
 
     async def ask(prompt: str, max_tokens: int) -> str:
         async with sem:
             return (await sampler.answer(prompt, max_tokens=max_tokens))[0]
 
+    def keep(row: dict) -> None:
+        if items is not None:
+            items.append(row)
+
     async def one_math(item):
         out = await ask(formats.math_prompt(item["problem"]), 4096)
-        return await vm.equivalent(vm.answer_of(out), item["target"])
+        ok = await vm.equivalent(vm.answer_of(out), item["target"])
+        keep({"task": "math", "id": item["id"], "correct": ok, "output": out})
+        return ok
 
     async def one_code(item):
         out = await ask(formats.code_prompt(item["text"], item["tests"]), 4096)
         tests = item["tests"] + item.get("hidden_tests", [])
-        return await asyncio.to_thread(vc.run_tests, vc.extract_code(out), tests, timeout=CODE_TIMEOUT)
+        ok = await asyncio.to_thread(vc.run_tests, vc.extract_code(out), tests, timeout=CODE_TIMEOUT)
+        keep({"task": "code", "id": item["id"], "correct": ok, "output": out})
+        return ok
 
     async def one_if(item):
         out = await ask(item["prompt"], 1024)
-        return item["kind"], vi.score(item["prompt"], item["constraints"], out)
+        s = vi.score(item["prompt"], item["constraints"], out)
+        keep({"task": "if", "id": item["id"], "correct": s["prompt_strict"], "score": s, "kind": item["kind"],
+              "output": out})
+        return item["kind"], s
 
     math_ok = await asyncio.gather(*(one_math(i) for i in math))
     code_ok = await asyncio.gather(*(one_code(i) for i in code))
@@ -104,13 +117,17 @@ def main() -> None:
     p.add_argument("--split", choices=["dev", "vault"], default="dev")
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--out", required=True)
+    p.add_argument("--items_out", default=None, help="optional JSONL of per-item results")
     args = p.parse_args()
     items = load_split(args.split, args.limit)  # validate the dev files before any Tinker client exists
-    result = asyncio.run(score_items(Sampler(STUDENT, args.checkpoint_path), *items))
+    collected: list[dict] = []
+    result = asyncio.run(score_items(Sampler(STUDENT, args.checkpoint_path), *items, items=collected))
     result["checkpoint_path"] = args.checkpoint_path
     result["split"] = args.split
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, indent=2))
+    if args.items_out:
+        jsonl.write(args.items_out, collected)
     print(json.dumps(result, indent=2))
 
 
