@@ -32,7 +32,7 @@ def test_guard_blocks_always_equal():
     assert s.reward == 0.0 and s.info["reason"] == "guard"
 
 
-def test_sentinel_blocks_early_clean_exit_even_without_guard():
+def test_early_clean_exit_fails_even_without_guard():
     assert not R.passes("def add(a, b):\n    raise SystemExit(0)", TESTS)
 
 
@@ -41,7 +41,7 @@ def test_mock_module_loaded_fails_even_without_guard():
     assert not R.passes(code, TESTS)
 
 
-def test_frame_reading_sentinel_is_guarded():
+def test_frame_reading_is_guarded():
     code = ("```python\ndef add(a, b):\n    import sys\n    fr = sys._getframe(1)\n"
             "    for c in fr.f_code.co_consts:\n        if isinstance(c, str) and len(c) == 32:\n"
             "            print(c)\n            raise SystemExit(0)\n```")
@@ -56,34 +56,18 @@ def _reward(body):
     return R.code_reward(f"```python\n{body}\n```", TESTS, HIDDEN, truncated=False)
 
 
-def test_source_read_via_file_cannot_forge_pass():
-    for opener in ("open(__file__)", "open('solution.py')"):
-        body = (f"def add(a, b):\n    import re\n    t = re.findall('[0-9a-f]{{32}}', {opener}.read())\n"
-                "    print(t[0] if t else '')\n    raise SystemExit(0)")
-        assert _reward(body).reward == 0.0
-
-
-def test_stdin_has_no_token_for_program():
-    body = ("def add(a, b):\n    import sys\n    print(sys.stdin.read())\n    raise SystemExit(0)")
-    assert _reward(body).reward == 0.0
 
 
 def test_early_exit_before_asserts_scores_zero():
     assert _reward("def add(a, b):\n    raise SystemExit(0)").reward == 0.0
 
 
-def test_temp_dir_listing_yields_nothing():
-    body = ("def add(a, b):\n    import os\n    for n in os.listdir('.'):\n        try:\n"
-            "            print(open(n).read())\n        except Exception:\n            pass\n"
-            "    raise SystemExit(0)")
-    assert _reward(body).reward == 0.0
-
 
 def test_wrong_solution_scores_zero():
     assert _reward("def add(a, b):\n    return a - b").reward == 0.0
 
 
-def test_traceback_walk_to_launcher_token_scores_zero():
+def test_traceback_frame_walk_is_guarded():
     body = ("def add(a, b):\n    try:\n        1 / 0\n    except Exception as e:\n"
             "        f = e.__traceback__.tb_frame.f_back\n        print(f.f_locals.get('token'))\n"
             "    raise SystemExit(0)")
@@ -109,4 +93,26 @@ def test_eval_import_and_dunder_hacks_are_guarded():
 def test_honest_class_with_dunders_still_scores():
     body = ("class N:\n    def __init__(self, v):\n        self.v = v\n    def __repr__(self):\n"
             "        return str(self.v)\ndef add(a, b):\n    return N(a + b).v")
+    assert _reward(body).reward == 1.0
+
+
+def test_exit_inside_called_function_scores_zero():
+    assert _reward("def add(a, b):\n    def g():\n        raise SystemExit(0)\n    g()").reward == 0.0
+
+
+def test_exit_primitives_are_guarded():
+    for body in ("def add(a, b):\n    import sys\n    sys.modules['os']._exit(0)",
+                 "def add(a, b):\n    import os, sys\n    os.execv(sys.executable, [sys.executable])",
+                 "def add(a, b):\n    import os, threading\n    threading.Thread(target=lambda: os._exit(0)).start()\n"
+                 "    return a + b"):
+        assert _reward(body).info["reason"] == "guard"
+
+
+def test_overriding_builtins_exec_does_not_skip_tests():
+    code = "import builtins\nbuiltins.exec = lambda *a, **k: None\ndef add(a, b):\n    return a - b"
+    assert not R.passes(code, TESTS)
+
+
+def test_junk_stdout_does_not_matter():
+    body = "def add(a, b):\n    print('junk', 'x' * 50)\n    return a + b"
     assert _reward(body).reward == 1.0

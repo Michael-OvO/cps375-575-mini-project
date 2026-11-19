@@ -20,7 +20,6 @@ CLEAN = [
     "def f(xs):\n    builtins = [x for x in xs]\n    builtins.append(1)\n    return builtins",
     "def f(xs):\n    builtins = []\n    builtins.x = 1\n    return builtins",
     "def f(x):\n    print = x\n    return print",
-    "def f(o):\n    return getattr(o, 'system', None)",
     "def f():\n    def quit():\n        return 1\n    return quit()",
     "class Stack:\n    def __init__(self):\n        self.items = []\n    def push(self, x):\n        self.items.append(x)",
 ]

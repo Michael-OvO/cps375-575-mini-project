@@ -1,11 +1,15 @@
 """AST guard for model-written code in the code reward. It flags early exits, process control, mocking,
-introspection that could read the harness sentinel, rebinding of builtins, and equality overrides. Benign uses
+introspection, process-exit and exec primitives, rebinding of builtins, and equality overrides. Benign uses
 such as sys.maxsize and os.path pass."""
 
 import ast
 
 BANNED_MODULES = {"subprocess", "ctypes", "importlib", "inspect", "gc", "pickle", "marshal", "types", "code",
-                  "codeop", "runpy", "pdb", "traceback"}
+                  "codeop", "runpy", "pdb", "traceback", "posix", "nt", "signal", "faulthandler"}
+EXIT_NAMES = {"_exit", "abort", "kill", "killpg", "execv", "execve", "execl", "execle", "execlp", "execlpe",
+              "execvp", "execvpe", "posix_spawn", "posix_spawnp", "spawnv", "spawnve", "spawnl", "spawnle",
+              "spawnlp", "spawnlpe", "spawnvp", "spawnvpe", "system", "popen", "fork", "forkpty", "settrace",
+              "setprofile", "_getframe", "_current_frames", "excepthook", "unraisablehook", "addaudithook"}
 DYNAMIC = {"exec", "eval", "compile", "__import__", "breakpoint", "vars", "locals", "globals"}
 ATTR_GETTERS = {"attrgetter", "methodcaller"}
 DUNDER_OK = {"__init__", "__name__", "__len__", "__iter__", "__next__", "__lt__", "__le__", "__gt__", "__ge__",
@@ -14,7 +18,7 @@ DUNDER_OK = {"__init__", "__name__", "__len__", "__iter__", "__next__", "__lt__"
 BANNED_CALLS = {"sys.exit", "os._exit", "os.kill", "os.system", "exit", "quit", "sys._getframe"} | DYNAMIC
 BANNED_FROM = {"sys": {"exit", "_getframe", "_current_frames"}, "os": {"_exit", "kill", "system"},
                "unittest": {"mock"}}
-FRAME_ATTRS = {"f_back", "f_locals", "f_globals", "f_code", "tb_frame", "gi_frame", "cr_frame", "co_consts",
+FRAME_ATTRS = EXIT_NAMES | {"f_back", "f_locals", "f_globals", "f_code", "tb_frame", "gi_frame", "cr_frame", "co_consts",
                "_getframe", "_current_frames", "walk_stack", "extract_stack", "currentframe", "settrace",
                "setprofile", "__getattribute__", "__traceback__", "exc_info", "ag_frame"}
 EQ_NAMES = {"__eq__", "__ne__"}
@@ -112,6 +116,8 @@ def violations(code: str) -> list[str]:
                 out.add(f"import:{mod}")
             for a in n.names:
                 if a.name in BANNED_FROM.get(mod, ()):
+                    out.add(f"from:{mod}.{a.name}")
+                if a.name in EXIT_NAMES:
                     out.add(f"from:{mod}.{a.name}")
                 if a.name in ATTR_GETTERS:
                     out.add(f"call:{a.name}")

@@ -5,7 +5,6 @@ raised), RLIMIT_FSIZE/NOFILE, a wall timeout, a psutil RSS watchdog, a temp-dir 
 RLIMIT_AS is not used: it raises ValueError on macOS. The program is delivered as a file, not on the command line."""
 
 import os
-import secrets
 import signal
 import subprocess
 import sys
@@ -52,21 +51,30 @@ del _r
 
 def _main():
     import builtins, os, sys
-    _k9 = sys.stdin.readline().strip()
+    _exit, _compile, _exec, _bi, _flush, _mods = os._exit, compile, exec, builtins, sys.stdout.flush, sys.modules
     with open('solution.py', 'rb') as f:
-        prog = compile(f.read().decode('utf-8', 'replace'), 'solution.py', 'exec')
+        prog = f.read().decode('utf-8', 'replace')
     with open('tests.py', 'rb') as f:
-        tests = compile(f.read().decode('utf-8', 'replace'), 'tests.py', 'exec')
+        tests = f.read().decode('utf-8', 'replace')
     os.unlink('solution.py')
     os.unlink('tests.py')
-    g = {{'__name__': '__main__', '__builtins__': builtins}}
-    exec(prog, g)
-    exec(tests, g)
-    if 'unittest.mock' in sys.modules:
-        raise SystemExit(3)
-    sys.stdout.write('\\n' + _k9 + '\\n')
-    sys.stdout.flush()
-    del _k9
+    g = {{'__name__': '__main__', '__builtins__': _bi}}
+    try:
+        _exec(_compile(prog, 'solution.py', 'exec'), g)
+        _exec(_compile(tests, 'tests.py', 'exec'), g)
+        if 'unittest.mock' in _mods:
+            raise SystemExit(3)
+    except BaseException:
+        try:
+            _flush()
+        except BaseException:
+            pass
+        _exit(1)
+    try:
+        _flush()
+    except BaseException:
+        pass
+    _exit(0)
 
 
 _main()
@@ -127,15 +135,11 @@ def run_program(program: str, cpu_s: int = 10, wall_s: float = 30, rss_mb: int =
 
 def run_tests(program: str, tests: list[str], cpu_s: int = 10, wall_s: float = 30, rss_mb: int = 512,
               stdout_cap: int = 65536) -> tuple[Result, bool]:
-    """Run program then tests in one fresh namespace. A random token reaches the child only on stdin and is
-    printed after the tests finish, so passed means the tests really ran to the end."""
-    token = secrets.token_hex(16)
-    res = _run({"solution.py": program, "tests.py": "\n".join(tests) + "\n"}, _TEST_LAUNCHER, token + "\n",
+    """Run program then tests in one fresh namespace. The launcher exits 0 only after both ran to the end without
+    any exception or SystemExit, so passed is the exit status. No secret is involved."""
+    res = _run({"solution.py": program, "tests.py": "\n".join(tests) + "\n"}, _TEST_LAUNCHER, None,
                cpu_s, wall_s, rss_mb, stdout_cap)
-    lines = res.stdout.splitlines()
-    ok = (res.returncode == 0 and not res.timed_out and not res.over_memory and bool(lines)
-          and lines[-1] == token)
-    return res, ok
+    return res, res.returncode == 0 and not res.timed_out and not res.over_memory
 
 
 def _run(files: dict[str, str], launcher: str, stdin: str | None, cpu_s: int, wall_s: float, rss_mb: int,
