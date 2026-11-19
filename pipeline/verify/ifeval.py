@@ -1,19 +1,37 @@
-"""Strict and loose constraint checking over standard and project-specific types."""
+"""Strict and loose constraint checking over standard, IFEvalG/IFBench-train and project-specific types."""
 
 from instruction_following_eval import instructions_registry
 from instruction_following_eval.evaluation import ensure_nltk_resource
+from langdetect import DetectorFactory
 
-from pipeline.constraints import extra
+from pipeline.constraints import extra, ifevalg
 
 ensure_nltk_resource()
+DetectorFactory.seed = 0  # language checks must be deterministic for rewards
+
+
+def route(cid: str) -> str:
+    if cid in extra.REGISTRY:
+        return "extra"
+    if cid in instructions_registry.INSTRUCTION_DICT:
+        return "official"
+    if cid in ifevalg.REGISTRY:
+        return "ifevalg"
+    raise KeyError(f"no checker for constraint id {cid!r}")
 
 
 def _instance(constraint: dict, prompt: str):
     cid, kwargs = constraint["id"], constraint.get("kwargs") or {}
-    if cid in extra.REGISTRY:
+    where = route(cid)
+    if where == "extra":
         return extra.REGISTRY[cid].bind(kwargs)
-    inst = instructions_registry.INSTRUCTION_DICT[cid](cid)
-    inst.build_description(**kwargs)
+    if where == "official":
+        # None would make build_description draw a random value: drop it so the check is deterministic.
+        inst = instructions_registry.INSTRUCTION_DICT[cid](cid)
+        inst.build_description(**{k: v for k, v in kwargs.items() if v is not None})
+    else:
+        inst = ifevalg.REGISTRY[cid](cid)  # upstream IF-RLVR builds with falsy kwargs dropped
+        inst.build_description(**{k: v for k, v in kwargs.items() if v})
     args = inst.get_instruction_args()
     if args and "prompt" in args:
         inst.build_description(prompt=prompt)

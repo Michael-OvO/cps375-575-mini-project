@@ -1,5 +1,7 @@
 import random
 
+import pytest
+
 from pipeline.constraints import extra, sample
 from pipeline.verify import ifeval as vi
 
@@ -47,3 +49,27 @@ def test_wrap_never_combined_with_start_or_end():
             assert not ("wrap" in groups and groups & {"start", "end"}), (mode, [c["id"] for c in cons])
             if mode == "dev_unseen":
                 assert any(c["id"] in extra.REGISTRY and extra.REGISTRY[c["id"]].dev_only for c in cons)
+
+
+def test_route_order():
+    assert vi.route("x:xml_wrap") == "extra"
+    assert vi.route("keywords:frequency") == "official"
+    assert vi.route("letters:letter_counting2") == "ifevalg"
+    with pytest.raises(KeyError):
+        vi.route("nope:nothing")
+
+
+def test_ifevalg_id_scores_without_keyerror():
+    c = [{"id": "letters:letter_counting2", "kwargs": {"letter": "s", "let_frequency": 3, "let_relation": "at least"}}]
+    assert vi.check("p", c, "sss is fun") == [True]
+    assert vi.check("p", c, "no") == [False]
+
+
+def test_official_none_kwargs_are_deterministic():
+    c = [{"id": "length_constraints:number_words", "kwargs": {"num_words": 5, "relation": "at least",
+                                                             "keyword": None}}]
+    results = set()
+    for seed in range(20):
+        random.seed(seed)
+        results.add(tuple(vi.check("p", c, "one two three four five six")))
+    assert results == {(True,)}
