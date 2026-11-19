@@ -241,6 +241,15 @@ def test_graded_truncation_cases():
     assert s.info["reason"] == "truncated_loop" and 0 < s.info["loop_onset"] < 0.2
 
 
+def test_cut_inside_the_answer_line_scores_what_the_grader_reads():
+    assert _mr("work\n\nANSWER: \\frac{1}{", "\\frac{1}{2}", True).reward == R.TRUNC_PENALTY  # partial: wrong
+    assert _mr("work\n\nANSWER:", "4", True).reward == R.TRUNC_PENALTY  # empty answer
+    assert _mr("work\n\nANS", "4", True).reward == R.TRUNC_PENALTY  # label cut: no answer line
+    assert _mr("work\n\nANSWER: 1", "12", True).reward == R.TRUNC_PENALTY  # prefix of the right answer: wrong
+    # a cut prefix that happens to equal the target is credited, exactly as the grader would score it
+    assert _mr("work\n\nANSWER: 1", "1", True).reward == R.TRUNC_ANSWERED
+
+
 def test_graded_truncation_off_keeps_old_rewards():
     s = _mr("work\n\nANSWER: 4", "4", True, graded=False)
     assert (s.reward, s.info["correct"]) == (0.0, True)
