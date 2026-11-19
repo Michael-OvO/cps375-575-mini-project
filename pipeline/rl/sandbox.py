@@ -5,6 +5,7 @@ raised), RLIMIT_FSIZE/NOFILE, a wall timeout, a psutil RSS watchdog, a temp-dir 
 RLIMIT_AS is not used: it raises ValueError on macOS. The program is delivered as a file, not on the command line."""
 
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -41,6 +42,33 @@ _src = _f.read().decode('utf-8', 'replace')
 _f.close()
 _g = {{'__name__': '__main__', '__file__': 'solution.py', '__builtins__': __builtins__}}
 exec(compile(_src, 'solution.py', 'exec'), _g)
+"""
+_TEST_LAUNCHER = """import resource as _r
+_r.setrlimit(_r.RLIMIT_CPU, ({cpu}, {cpu1}))
+_r.setrlimit(_r.RLIMIT_FSIZE, (1 << 24, 1 << 24))
+_r.setrlimit(_r.RLIMIT_NOFILE, (64, 64))
+del _r
+
+
+def _main():
+    import builtins, os, sys
+    token = sys.stdin.readline().strip()
+    with open('solution.py', 'rb') as f:
+        prog = compile(f.read().decode('utf-8', 'replace'), 'solution.py', 'exec')
+    with open('tests.py', 'rb') as f:
+        tests = compile(f.read().decode('utf-8', 'replace'), 'tests.py', 'exec')
+    os.unlink('solution.py')
+    os.unlink('tests.py')
+    g = {{'__name__': '__main__', '__builtins__': builtins}}
+    exec(prog, g)
+    exec(tests, g)
+    if 'unittest.mock' in sys.modules:
+        raise SystemExit(3)
+    sys.stdout.write('\\n' + token + '\\n')
+    sys.stdout.flush()
+
+
+_main()
 """
 
 
@@ -93,6 +121,24 @@ def _dir_size(path: str) -> int:
 
 def run_program(program: str, cpu_s: int = 10, wall_s: float = 30, rss_mb: int = 512,
                 stdout_cap: int = 65536) -> Result:
+    return _run({"solution.py": program}, _LAUNCHER, None, cpu_s, wall_s, rss_mb, stdout_cap)
+
+
+def run_tests(program: str, tests: list[str], cpu_s: int = 10, wall_s: float = 30, rss_mb: int = 512,
+              stdout_cap: int = 65536) -> tuple[Result, bool]:
+    """Run program then tests in one fresh namespace. A random token reaches the child only on stdin and is
+    printed after the tests finish, so passed means the tests really ran to the end."""
+    token = secrets.token_hex(16)
+    res = _run({"solution.py": program, "tests.py": "\n".join(tests) + "\n"}, _TEST_LAUNCHER, token + "\n",
+               cpu_s, wall_s, rss_mb, stdout_cap)
+    lines = res.stdout.splitlines()
+    ok = (res.returncode == 0 and not res.timed_out and not res.over_memory and bool(lines)
+          and lines[-1] == token)
+    return res, ok
+
+
+def _run(files: dict[str, str], launcher: str, stdin: str | None, cpu_s: int, wall_s: float, rss_mb: int,
+         stdout_cap: int) -> Result:
     with _SLOTS, tempfile.TemporaryDirectory() as raw_tmp:
         tmp = os.path.realpath(raw_tmp)  # the sandbox matches real paths (/private/var/...)
         exe = os.path.realpath(sys.executable)
@@ -100,16 +146,23 @@ def run_program(program: str, cpu_s: int = 10, wall_s: float = 30, rss_mb: int =
         profile = Path(tmp) / "profile.sb"
         profile.write_text(_PROFILE.format(tmp=tmp, exe=exe, reads=_subpaths(reads), ancestors=_ancestors(reads)))
         try:
-            (Path(tmp) / "solution.py").write_bytes(program.encode("utf-8", "surrogatepass"))
+            for name, text in files.items():
+                (Path(tmp) / name).write_bytes(text.encode("utf-8", "surrogatepass"))
         except (UnicodeEncodeError, OSError):
             return Result(1, "")
         proc = subprocess.Popen(
             ["sandbox-exec", "-f", str(profile), sys.executable, "-I", "-B", "-c",
-             _LAUNCHER.format(cpu=cpu_s, cpu1=cpu_s + 1)],
-            cwd=tmp, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+             launcher.format(cpu=cpu_s, cpu1=cpu_s + 1)],
+            cwd=tmp, stdin=subprocess.DEVNULL if stdin is None else subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             env={"PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8"}, start_new_session=True,
         )
         try:
+            if stdin is not None:
+                try:
+                    proc.stdin.write(stdin.encode())
+                    proc.stdin.close()
+                except OSError:
+                    pass
             chunks: list[bytes] = []
             size = 0
 

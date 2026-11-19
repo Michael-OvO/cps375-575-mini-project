@@ -50,3 +50,34 @@ def test_frame_reading_sentinel_is_guarded():
 
 def test_prose_without_fence_scores_zero():
     assert R.code_reward("The answer is add.", TESTS, HIDDEN, truncated=False).reward == 0.0
+
+
+def _reward(body):
+    return R.code_reward(f"```python\n{body}\n```", TESTS, HIDDEN, truncated=False)
+
+
+def test_source_read_via_file_cannot_forge_pass():
+    for opener in ("open(__file__)", "open('solution.py')"):
+        body = (f"def add(a, b):\n    import re\n    t = re.findall('[0-9a-f]{{32}}', {opener}.read())\n"
+                "    print(t[0] if t else '')\n    raise SystemExit(0)")
+        assert _reward(body).reward == 0.0
+
+
+def test_stdin_has_no_token_for_program():
+    body = ("def add(a, b):\n    import sys\n    print(sys.stdin.read())\n    raise SystemExit(0)")
+    assert _reward(body).reward == 0.0
+
+
+def test_early_exit_before_asserts_scores_zero():
+    assert _reward("def add(a, b):\n    raise SystemExit(0)").reward == 0.0
+
+
+def test_temp_dir_listing_yields_nothing():
+    body = ("def add(a, b):\n    import os\n    for n in os.listdir('.'):\n        try:\n"
+            "            print(open(n).read())\n        except Exception:\n            pass\n"
+            "    raise SystemExit(0)")
+    assert _reward(body).reward == 0.0
+
+
+def test_wrong_solution_scores_zero():
+    assert _reward("def add(a, b):\n    return a - b").reward == 0.0
