@@ -50,6 +50,36 @@
    "S": 0.41621352170751724,
    "S_fallback": false,
    "L": 538.4504166666667,
+   "mean_len": 551.6386704217821,
+   "trunc": 0.0024478004092261907,
+   "gate": 0.0,
+   "vphf": 0.0
+  },
+  "if": {
+   "S": 0.3348999007592245,
+   "S_fallback": false,
+   "L": 300.24333333333334,
+   "mean_len": 298.42971884645056,
+   "trunc": 0.04167872299382716,
+   "gate": 0.021267361111111112,
+   "vphf": 0.0
+  },
+  "code": {
+   "S": 0.43067256207168925,
+   "S_fallback": false,
+   "L": 70.07583333333334,
+   "mean_len": 151.267859634088,
+   "trunc": 0.0,
+   "gate": 0.00028150908801020404,
+   "vphf": 0.09491340481505102
+  }
+ },
+ "steps": 128,
+ "baseline_calibration_raw": {
+  "math": {
+   "S": 0.41621352170751724,
+   "S_fallback": false,
+   "L": 538.4504166666667,
    "mean_len": 538.4504166666667,
    "trunc": 0.0025,
    "gate": 0.0,
@@ -74,5 +104,5 @@
    "vphf": 0.02666666666666667
   }
  },
- "steps": 128
+ "baseline_note": "pause baselines (mean_len/trunc/gate/vphf) reweighted from calibration strata to the main schedule's stratum mix after the step-20 false pause (calibration code sample was 95% ct, schedule is 71% oci); S/L EMA init unchanged"
 }
