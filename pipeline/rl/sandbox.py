@@ -52,7 +52,7 @@ del _r
 
 def _main():
     import builtins, os, sys
-    token = sys.stdin.readline().strip()
+    _k9 = sys.stdin.readline().strip()
     with open('solution.py', 'rb') as f:
         prog = compile(f.read().decode('utf-8', 'replace'), 'solution.py', 'exec')
     with open('tests.py', 'rb') as f:
@@ -64,8 +64,9 @@ def _main():
     exec(tests, g)
     if 'unittest.mock' in sys.modules:
         raise SystemExit(3)
-    sys.stdout.write('\\n' + token + '\\n')
+    sys.stdout.write('\\n' + _k9 + '\\n')
     sys.stdout.flush()
+    del _k9
 
 
 _main()

@@ -4,8 +4,14 @@ such as sys.maxsize and os.path pass."""
 
 import ast
 
-BANNED_MODULES = {"subprocess", "ctypes", "importlib", "inspect", "gc"}
-BANNED_CALLS = {"sys.exit", "os._exit", "os.kill", "os.system", "exit", "quit", "sys._getframe", "__import__"}
+BANNED_MODULES = {"subprocess", "ctypes", "importlib", "inspect", "gc", "pickle", "marshal", "types", "code",
+                  "codeop", "runpy", "pdb", "traceback"}
+DYNAMIC = {"exec", "eval", "compile", "__import__", "breakpoint", "vars", "locals", "globals"}
+ATTR_GETTERS = {"attrgetter", "methodcaller"}
+DUNDER_OK = {"__init__", "__name__", "__len__", "__iter__", "__next__", "__lt__", "__le__", "__gt__", "__ge__",
+             "__hash__", "__repr__", "__str__", "__getitem__", "__setitem__", "__contains__", "__add__",
+             "__mul__", "__doc__"}
+BANNED_CALLS = {"sys.exit", "os._exit", "os.kill", "os.system", "exit", "quit", "sys._getframe"} | DYNAMIC
 BANNED_FROM = {"sys": {"exit", "_getframe", "_current_frames"}, "os": {"_exit", "kill", "system"},
                "unittest": {"mock"}}
 FRAME_ATTRS = {"f_back", "f_locals", "f_globals", "f_code", "tb_frame", "gi_frame", "cr_frame", "co_consts",
@@ -16,7 +22,11 @@ REBIND_NAMES = {"print", "AssertionError"}
 MODULE_ATTRS = {"exit", "_exit", "kill", "system", "print", "AssertionError"}
 GATED_MODULES = {"os", "sys", "builtins", "__builtins__"}
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-LOCAL_OK = {"exit", "quit"}
+LOCAL_OK = {"exit", "quit"} | (DYNAMIC - {"__import__"})
+
+
+def _dunder(name: str) -> bool:
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
 
 
 def _dotted(node: ast.AST, aliases: dict[str, str]) -> str:
@@ -103,6 +113,8 @@ def violations(code: str) -> list[str]:
             for a in n.names:
                 if a.name in BANNED_FROM.get(mod, ()):
                     out.add(f"from:{mod}.{a.name}")
+                if a.name in ATTR_GETTERS:
+                    out.add(f"call:{a.name}")
         elif isinstance(n, ast.Call):
             name = _dotted(n.func, aliases)
             if name in BANNED_CALLS and not (name in LOCAL_OK and locally_bound(n, name)):
@@ -112,6 +124,8 @@ def violations(code: str) -> list[str]:
                     if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
                         out.add("getattr:dynamic")
                         continue
+                    if _dunder(arg.value) and arg.value not in DUNDER_OK:
+                        out.add(f"dunder:{arg.value}")
                     if name == "setattr" and arg.value in EQ_NAMES:
                         out.add(f"str:{arg.value}")
                     elif arg.value in FRAME_ATTRS:
@@ -120,14 +134,28 @@ def violations(code: str) -> list[str]:
                         out.add(f"getattr:{arg.value}")
         elif isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in FRAME_ATTRS:
             out.add(f"getattr:{n.value}")
-        elif isinstance(n, ast.Name) and n.id in FRAME_ATTRS:
-            out.add(f"attr:{n.id}")
+        elif isinstance(n, ast.Name):
+            if n.id in FRAME_ATTRS:
+                out.add(f"attr:{n.id}")
+            if n.id in ATTR_GETTERS:
+                out.add(f"call:{n.id}")
+            if isinstance(n.ctx, ast.Load):
+                if n.id in DYNAMIC and not locally_bound(n, n.id):
+                    out.add(f"call:{n.id}")
+                elif _dunder(n.id) and n.id not in DUNDER_OK:
+                    out.add(f"dunder:{n.id}")
         elif isinstance(n, ast.Dict):
             for k in n.keys:
                 if isinstance(k, ast.Constant) and k.value in EQ_NAMES:
                     out.add(f"str:{k.value}")
-        elif isinstance(n, ast.Attribute) and n.attr in FRAME_ATTRS:
-            out.add(f"attr:{n.attr}")
+        elif isinstance(n, ast.Attribute) and (n.attr in FRAME_ATTRS or n.attr in ATTR_GETTERS
+                                               or (_dunder(n.attr) and n.attr not in DUNDER_OK)):
+            if n.attr in FRAME_ATTRS:
+                out.add(f"attr:{n.attr}")
+            elif n.attr in ATTR_GETTERS:
+                out.add(f"call:{n.attr}")
+            else:
+                out.add(f"dunder:{n.attr}")
         elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if n.name in EQ_NAMES or (n.name in REBIND_NAMES and module_level(n)):
                 out.add(f"def:{n.name}")

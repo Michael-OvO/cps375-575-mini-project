@@ -3,6 +3,13 @@ import pytest
 from pipeline.rl.code_guard import violations
 
 CLEAN = [
+    "def f(x):\n    return x\nif __name__ == '__main__':\n    f(1)",
+    "class P:\n    def __init__(self, v):\n        self.v = v\n    def __repr__(self):\n        return str(self.v)\n"
+    "    def __lt__(self, o):\n        return self.v < o.v",
+    "def f(xs):\n    return sorted(xs, key=lambda x: x[1])",
+    "import functools\ndef f(xs):\n    return sorted(xs, key=functools.cmp_to_key(lambda a, b: a - b))",
+    "import heapq\ndef f(xs):\n    heapq.heapify(xs)\n    return heapq.heappop(xs)",
+    "import re\nfrom collections import Counter\ndef f(s):\n    return Counter(s), re.compile('a')",
     "def f(o):\n    return getattr(o, 'name', None)",
     "import sys\ndef f(n):\n    return min(n, sys.maxsize)",
     "import os\ndef f(p):\n    return os.path.join(p, 'x')",
@@ -19,6 +26,21 @@ CLEAN = [
 ]
 
 DIRTY = {
+    "exec('x=1')": "call:exec",
+    "def f():\n    return eval('1')": "call:eval",
+    "def f(s):\n    return compile(s, 'a', 'exec')": "call:compile",
+    "def f():\n    return globals()": "call:globals",
+    "def f():\n    return vars()": "call:vars",
+    "def f(g):\n    return g.__builtins__": "dunder:__builtins__",
+    "def f():\n    return ().__class__.__base__.__subclasses__()": "dunder:__subclasses__",
+    "def f(g):\n    return g.__code__": "dunder:__code__",
+    "def f(g):\n    return g.__dict__": "dunder:__dict__",
+    "def f(g):\n    return getattr(g, '__globals__')": "dunder:__globals__",
+    "import pickle\ndef f():\n    pass": "import:pickle",
+    "import types\ndef f():\n    pass": "import:types",
+    "import traceback\ndef f():\n    pass": "import:traceback",
+    "import operator\ndef f():\n    return operator.attrgetter('a')": "call:attrgetter",
+    "from operator import methodcaller\ndef f():\n    pass": "call:methodcaller",
     "def f():\n    import sys\n    sys.exit(0)": "call:sys.exit",
     "from sys import exit\ndef f():\n    exit(0)": "from:sys.exit",
     "import sys as s\ndef f():\n    s.exit(0)": "call:sys.exit",

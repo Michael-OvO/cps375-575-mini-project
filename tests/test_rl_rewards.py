@@ -89,3 +89,24 @@ def test_traceback_walk_to_launcher_token_scores_zero():
             "    raise SystemExit(0)")
     s = _reward(body)
     assert s.reward == 0.0 and s.info["reason"] == "guard"
+
+
+def test_exec_string_frame_walk_is_guarded():
+    body = ("def add(a, b):\n    exec(\"import sys\\nf=sys._get\" + \"frame(1)\\nprint(f.f_back.f_locals)\")\n"
+            "    raise SystemExit(0)")
+    s = _reward(body)
+    assert s.reward == 0.0 and s.info["reason"] == "guard"
+
+
+def test_eval_import_and_dunder_hacks_are_guarded():
+    for body in ("def add(a, b):\n    eval(\"__imp\" + \"ort__('gc')\")\n    return a + b",
+                 "def add(a, b):\n    add.__builtins__\n    return a + b",
+                 "def add(a, b):\n    ().__class__.__base__.__subclasses__()\n    return a + b",
+                 "def add(a, b):\n    import pickle\n    return a + b"):
+        assert _reward(body).info["reason"] == "guard"
+
+
+def test_honest_class_with_dunders_still_scores():
+    body = ("class N:\n    def __init__(self, v):\n        self.v = v\n    def __repr__(self):\n"
+            "        return str(self.v)\ndef add(a, b):\n    return N(a + b).v")
+    assert _reward(body).reward == 1.0
