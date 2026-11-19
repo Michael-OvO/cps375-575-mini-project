@@ -1,0 +1,108 @@
+{
+ "lr": 2e-05,
+ "G": 8,
+ "groups": 64,
+ "rank": 32,
+ "caps": {
+  "math": 4096,
+  "code": 4096,
+  "if": 1024
+ },
+ "start_state": "tinker://1b749171-dd4a-515e-96f5-c5d7b67f551d:train:0/weights/v4r-final",
+ "v4_sampler": "tinker://59ce19da-5ae9-5392-93a1-01e8626fb70f:train:0/sampler_weights/v4",
+ "teacher": {
+  "on": false,
+  "lam": 0.0
+ },
+ "gated_sft": {
+  "on": true,
+  "mu": 0.5,
+  "max_per_step": 8
+ },
+ "save_every": 10,
+ "ttl_seconds": 1814400,
+ "task_weights": {
+  "if": 0.42164519817412577,
+  "math": 0.24999999999999997,
+  "code": 0.3283548018258743
+ },
+ "groups_per_step": {
+  "if": 27,
+  "math": 16,
+  "code": 21
+ },
+ "ema_init": {
+  "if": [
+   0.3348999007592245,
+   300.24333333333334
+  ],
+  "math": [
+   0.41621352170751724,
+   538.4504166666667
+  ],
+  "code": [
+   0.43067256207168925,
+   70.07583333333334
+  ]
+ },
+ "baseline": {
+  "math": {
+   "S": 0.41621352170751724,
+   "S_fallback": false,
+   "L": 538.4504166666667,
+   "mean_len": 551.6386704217821,
+   "trunc": 0.0024478004092261907,
+   "gate": 0.0,
+   "vphf": 0.0
+  },
+  "if": {
+   "S": 0.3348999007592245,
+   "S_fallback": false,
+   "L": 300.24333333333334,
+   "mean_len": 298.42971884645056,
+   "trunc": 0.04167872299382716,
+   "gate": 0.021267361111111112,
+   "vphf": 0.0
+  },
+  "code": {
+   "S": 0.43067256207168925,
+   "S_fallback": false,
+   "L": 70.07583333333334,
+   "mean_len": 151.267859634088,
+   "trunc": 0.0,
+   "gate": 0.00028150908801020404,
+   "vphf": 0.09491340481505102
+  }
+ },
+ "steps": 128,
+ "baseline_calibration_raw": {
+  "math": {
+   "S": 0.41621352170751724,
+   "S_fallback": false,
+   "L": 538.4504166666667,
+   "mean_len": 538.4504166666667,
+   "trunc": 0.0025,
+   "gate": 0.0,
+   "vphf": 0.0
+  },
+  "if": {
+   "S": 0.3348999007592245,
+   "S_fallback": false,
+   "L": 300.24333333333334,
+   "mean_len": 300.24333333333334,
+   "trunc": 0.0425,
+   "gate": 0.02,
+   "vphf": 0.0
+  },
+  "code": {
+   "S": 0.43067256207168925,
+   "S_fallback": false,
+   "L": 70.07583333333334,
+   "mean_len": 70.07583333333334,
+   "trunc": 0.0,
+   "gate": 0.0008333333333333334,
+   "vphf": 0.02666666666666667
+  }
+ },
+ "baseline_note": "pause baselines (mean_len/trunc/gate/vphf) reweighted from calibration strata to the main schedule's stratum mix after the step-20 false pause (calibration code sample was 95% ct, schedule is 71% oci); S/L EMA init unchanged"
+}

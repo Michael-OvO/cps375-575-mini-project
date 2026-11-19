@@ -406,3 +406,16 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 - Left as is (reviewed): the <4-word `too_short` gate (rare; brevity constraints are exempt), the trivially-true
   palindrome checker (vendored IFEvalG behaviour) and langdetect on short text (IFEval's own grader uses it).
 - KL-to-v4 is now written to `runs/rl1/kl_v4.jsonl` every 20 steps (it was only checked against the 0.05 warning).
+
+### rl1 → Main run to step 128, then extension (2026-11-18)
+- Steps 41–128 ran clean: no pauses; warnings only (math/IF train reward dips over 30-step windows while dev rose).
+  Spend $70.60 at step 128 incl. evals (~$0.46/step). KL to v4: 0.0047 (60), 0.0084 (80), 0.0079 (100), 0.0127 (120).
+- Dev greedy, math / code / IF seen / unseen / unseen_new:
+  step 0 73.8 / 71.5 / 68.3 / 50.1 / 41.0; 40 73.5 / 74.2 / 71.2 / 53.9 / 45.4; 60 72.6 / 74.5 / 74.4 / 59.6 / 48.1;
+  80 74.5 / 75.1 / 74.9 / 59.3 / 49.6; 100 72.6 / 75.4 / 76.2 / 60.2 / 52.5; 120 73.5 / 76.3 / 76.8 / 61.4 / 53.3;
+  128 75.4 / 76.6 / 76.0 / 59.7 / 56.5. Math greedy is noise around v4 (SE ~2.4); IF and code still rising.
+  Trap hack rate 0–0.04 (pause line baseline + 0.10).
+- Extension (the improvement round): `schedule.py --extend 72 --usd_per_step 0.47` adds steps 129–200 from prompts
+  not yet scheduled; steps 1–128, the smoke tail and the config (pause baselines included) are unchanged apart from
+  `steps`. Projected +$33.84, leaving the $27 eval/Phase 5 reserve under the $135 cap. Pre-extension copies:
+  `runs/rl1/schedule.step128.json`, `runs/rl1/config.step128.json`.

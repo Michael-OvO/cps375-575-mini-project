@@ -87,6 +87,33 @@ def build(pools: dict[str, list[dict]], summary: dict, per_step: dict[str, int],
     return sched
 
 
+def extend(sched: list[list[str]], main_steps: int, extra: int, pools: dict[str, list[dict]], summary: dict,
+           per_step: dict[str, int], rng: random.Random) -> list[list[str]]:
+    """Insert `extra` new main steps after the first `main_steps`, keeping those steps and the smoke tail as they
+    are; the new steps draw only prompts not already anywhere in the schedule."""
+    used = frozenset(i for step in sched for i in step)
+    return sched[:main_steps] + build(pools, summary, per_step, extra, rng, exclude=used) + sched[main_steps:]
+
+
+def run_extend(extra: int, usd: float, summary_path: str) -> None:
+    """Lengthen a started run: the prompt plan of steps already scheduled, the config (pause baselines included)
+    and the smoke tail stay fixed; only `steps` and the new tail of main steps change."""
+    cfg_path, sched_path = RUNS / "rl1" / "config.json", RUNS / "rl1" / "schedule.json"
+    cfg, sched = json.loads(cfg_path.read_text()), json.loads(sched_path.read_text())
+    assert len(sched) == cfg["steps"] + SMOKE_STEPS, "schedule.json must hold the main steps plus the smoke tail"
+    led = Ledger()
+    headroom = check_plan(extra, usd, led.total(), led.cap)
+    summary = json.loads(open(summary_path).read())
+    pools = {t: jsonl.read(RUNS / "rl1" / "pools" / f"{t}.jsonl") for t in PRIOR}
+    new = extend(sched, cfg["steps"], extra, pools, summary, cfg["groups_per_step"],
+                 random.Random(SEED + cfg["steps"]))
+    sched_path.write_text(json.dumps(new))
+    cfg["steps"] += extra
+    cfg_path.write_text(json.dumps(cfg, indent=1))
+    print(json.dumps({"steps": cfg["steps"], "added": extra, "usd_per_step": usd,
+                      "projected_extra_usd": round(extra * usd, 2), "headroom_usd": round(headroom, 2)}, indent=1))
+
+
 def check_plan(steps: int, usd: float, spent: float, cap: float) -> float:
     """Refuse a plan with no steps or one that would eat the eval/Phase 5 reserve; return the headroom."""
     headroom = cap - spent
@@ -109,9 +136,15 @@ def main() -> None:
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--budget", type=float, help="USD for main-run steps; steps = budget / step_usd")
     g.add_argument("--steps", type=int, help="explicit number of main-run steps")
+    g.add_argument("--extend", type=int, help="add this many main steps to a started run (needs --usd_per_step)")
+    p.add_argument("--usd_per_step", type=float, help="measured cost per step, for the --extend budget check")
     p.add_argument("--summary", default=str(RUNS / "rl1" / "calibration" / "summary.json"))
     p.add_argument("--force", action="store_true", help="overwrite the schedule after training has started")
     a = p.parse_args()
+    if a.extend is not None:
+        if a.usd_per_step is None:
+            p.error("--extend needs --usd_per_step")
+        return run_extend(a.extend, a.usd_per_step, a.summary)
     check_overwrite(a.force)
     summary = json.loads(open(a.summary).read())
     pools = {t: jsonl.read(RUNS / "rl1" / "pools" / f"{t}.jsonl") for t in PRIOR}

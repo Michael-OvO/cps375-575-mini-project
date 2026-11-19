@@ -66,6 +66,16 @@ def test_build_schedule_no_repeats():
     assert len(sched) == 5 and len(flat) == len(set(flat)) == 90
 
 
+def test_extend_keeps_scheduled_steps_and_smoke_tail():
+    pools = {"math": [{"id": f"m{i}", "stratum": "a|4"} for i in range(100)]}
+    st = {"a|4": {"n": 1, "e_pq": 0.2, "greedy_fail": 0.1, "informative": 0.5, "p_hat": 0.5}}
+    old = S.build(pools, {"strata": st}, {"math": 5}, steps=4, rng=random.Random(0))  # 3 main + 1 smoke
+    new = S.extend(old, 3, 2, pools, {"strata": st}, {"math": 5}, random.Random(1))
+    assert new[:3] == old[:3] and new[-1] == old[-1] and len(new) == 6
+    flat = [i for step in new for i in step]
+    assert len(flat) == len(set(flat)) == 30
+
+
 def test_domain_baseline_code_fields_and_fallback(capsys):
     r = _row("c|x", [0, 0, 1, 0, 0, 0, 0, 0], task="code", lens=[10, 20, 30, 40, 10, 20, 30, 40])
     r["vis"] = [True, False, None, True, None, None, None, None]

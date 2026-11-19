@@ -1,2 +1,5 @@
 {"step": 20, "time": 1795054743.3025339, "warning": "code/len 146 > 2x baseline 70"}
 {"step": 20, "time": 1795054743.302539, "warning": "code/vphf 0.059 > baseline 0.027 + 0.03"}
+{"step": 80, "time": 1795061592.2881238, "warning": "math/reward falling over 30 steps (0.612 -> 0.545)"}
+{"step": 80, "time": 1795061592.28813, "warning": "if/reward falling over 30 steps (0.859 -> 0.817)"}
+{"step": 120, "time": 1795063686.637558, "warning": "if/reward falling over 30 steps (0.856 -> 0.817)"}
