@@ -357,4 +357,4 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 ### rl1 prompt pools (2026-11-18)
 
 - Built locally ($0) by `pipeline.rl.pools`: math 6,545, IF 9,000 chosen (target reached, bins 2,250/5,400/1,350 =
-  25/60/15), code 14,999 kept (stub_passes 32). 50 trap prompts in `data/rl_traps.jsonl` stay out of every pool.
+  25/60/15), code 14,999 kept (stub rule applied last: 32 drops there; earlier drops already removed ~340 stub-weak OCI tasks). 50 trap prompts in `data/rl_traps.jsonl` stay out of every pool.
