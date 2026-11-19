@@ -1,0 +1,129 @@
+{
+  "name": "v4_smoke",
+  "seed": 20261113,
+  "sources": [
+    {
+      "name": "math_train",
+      "dataset": "DigitalLearningGmbH/MATH-lighteval",
+      "split": "train",
+      "count": 6310
+    },
+    {
+      "name": "math_new",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 16556
+    },
+    {
+      "name": "math_cells",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 1134
+    },
+    {
+      "name": "code",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 4371
+    },
+    {
+      "name": "instruction_following",
+      "dataset": "teacher-generated",
+      "split": "generated",
+      "count": 11334
+    },
+    {
+      "name": "general",
+      "dataset": "allenai/tulu-3-sft-mixture",
+      "split": "train",
+      "count": 1997
+    },
+    {
+      "name": "oci",
+      "dataset": "nvidia/OpenCodeInstruct",
+      "split": "train",
+      "count": 7629
+    },
+    {
+      "name": "if_rlvr",
+      "dataset": "allenai/IF_multi_constraints_upto5",
+      "split": "train",
+      "count": 212
+    }
+  ],
+  "requested": {
+    "math": 24000,
+    "code": 12000,
+    "ifeval": 14000,
+    "general": 2000
+  },
+  "shortfall": {
+    "math": 0,
+    "code": 0,
+    "ifeval": 2454,
+    "general": 3
+  },
+  "total_examples": 49543,
+  "total_tokens": 26858235,
+  "estimated_cost_usd": 39.29,
+  "dropped_too_long": 174,
+  "dropped_too_long_response": 162,
+  "dropped_overlap": 1905,
+  "dropped_invalid": 1,
+  "dropped_dev_overlap": 277,
+  "dropped_dev_member": 787,
+  "dropped_duplicate": 996,
+  "dropped_by_task": {
+    "math": {
+      "invalid": 0,
+      "too_long": 8,
+      "too_long_response": 0,
+      "overlap": 1725,
+      "dev_overlap": 75,
+      "dev_member": 0,
+      "duplicate": 0
+    },
+    "code": {
+      "invalid": 0,
+      "too_long": 1,
+      "too_long_response": 0,
+      "overlap": 180,
+      "dev_overlap": 196,
+      "dev_member": 399,
+      "duplicate": 996
+    },
+    "ifeval": {
+      "invalid": 0,
+      "too_long": 1,
+      "too_long_response": 162,
+      "overlap": 0,
+      "dev_overlap": 6,
+      "dev_member": 388,
+      "duplicate": 0
+    },
+    "general": {
+      "invalid": 1,
+      "too_long": 2,
+      "too_long_response": 0,
+      "overlap": 0,
+      "dev_overlap": 0,
+      "dev_member": 0,
+      "duplicate": 0
+    }
+  },
+  "math_verified": {
+    "agreement": 2735,
+    "known_answer": 6310,
+    "single_solve": 14955
+  },
+  "overlap_filter_enabled": true,
+  "no_overlap_check_acknowledged": false,
+  "dev_overlap_filter_enabled": true,
+  "missing_pools": [],
+  "missing_dev_files": [],
+  "teachers": [
+    "claude",
+    "claude-2",
+    "codex"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "name": "v4",
+  "baseline": "v3",
+  "ok": true,
+  "fails": [],
+  "warnings": [
+    "mix.math: 57% -> 46% of examples",
+    "code.answer_chars: median 202 -> 480",
+    "code.prompt_names_function: 8% -> 46%"
+  ],
+  "acknowledged": {
+    "mix.math": "v4 raises IF share (IF-RLVR) per the classmate comparison",
+    "code.answer_chars": "OCI reference code keeps docstrings; harness-safe, all tests pass",
+    "code.prompt_names_function": "OCI specs name the function; MBPP tests name it too"
+  },
+  "unacknowledged": [],
+  "profile": {
+    "counts": {
+      "instruction_following": 16000,
+      "code": 11000,
+      "math": 25000,
+      "general": 1997
+    },
+    "share": {
+      "instruction_following": 0.2963127581161916,
+      "code": 0.20371502120488175,
+      "math": 0.46298868455654946,
+      "general": 0.03698353612237717
+    },
+    "features": {
+      "instruction_following.answer_chars": 1384.0,
+      "instruction_following.prompt_chars": 349.0,
+      "instruction_following.prompt_rules_first": 0.1241875,
+      "code.answer_chars": 480.0,
+      "code.prompt_chars": 2074.0,
+      "code.prompt_names_function": 0.4647272727272727,
+      "code.prompt_docstring_style": 0.027636363636363636,
+      "code.prompt_harness_template": 0.7019090909090909,
+      "code.answer_prose_first": 0.0,
+      "code.tests_use_module": 0.01927272727272727,
+      "code.tests_no_space_eq": 0.37363636363636366,
+      "math.answer_chars": 659.0,
+      "math.prompt_chars": 475.0,
+      "math.answer_markdown": 0.49656,
+      "general.answer_chars": 779.0,
+      "general.prompt_chars": 94.0
+    }
+  }
+}

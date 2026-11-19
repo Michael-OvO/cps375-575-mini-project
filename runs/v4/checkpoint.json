@@ -1,0 +1,10 @@
+{
+  "checkpoint_path": "tinker://59ce19da-5ae9-5392-93a1-01e8626fb70f:train:0/sampler_weights/v4",
+  "base_model": "Qwen/Qwen3.5-9B-Base",
+  "rank": 32,
+  "lr": 0.00047297908091376354,
+  "batch_size": 32,
+  "steps": 1688,
+  "train_tokens": 30209821,
+  "published": true
+}
