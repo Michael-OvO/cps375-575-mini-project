@@ -34,7 +34,7 @@ analysis: `reports/error_analysis_v1.md`. Designs: `docs/superpowers/specs/`. We
 
 ## Status (paused 2026-11-14, weekly Opus usage at 41%; resets 2026-11-20)
 
-**Submission:** v1 (`evaluation/submission.json`, checkpoint published). Best public sum so far.
+**Submission:** rl1 step 150 (`evaluation/submission.json`, checkpoint published, no expiry; user decision 2026-11-19). Was v1 until then; v1's file is kept at `runs/v1/submission.json`.
 
 **Acceptance rule (user, 2026-11-14):** a new version replaces the submission only if no area drops beyond
 noise (about 2 stderr) and the targeted area gains. Teacher was Opus only; from 2026-11-15 GPT is a second
@@ -520,3 +520,6 @@ Confirmation of the frozen choice (step 150) and fallback (step 160), greedy, pa
   Tinker billing sync reported $7.51 since rl1 start, which lags and undercounts; the ledger is the binding figure.
 - TTL cleared on step 150 and step 160 state and sampler paths.
 - Note: `runs/rl1/config.json` still has `caps.math` 3584 from branch b; restore 4096 before any further training.
+- **Submission (user, 2026-11-19): rl1 step 150.** Sampler checkpoint published (no expiry);
+  `evaluation/submission.json` is the full `eval_all` output from confirmation (also at `runs/rl1/submission.json`).
+  Replaces v1 (kept at `runs/v1/submission.json`). The user uploads it to Gradescope.
