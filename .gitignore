@@ -39,3 +39,4 @@ evaluation/submission.json
 # Generated previews (pipeline/preview.py)
 reports/data_preview.html
 runs/rl1/pools/*.jsonl
+runs/rl1/merge/

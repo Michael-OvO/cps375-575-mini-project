@@ -1,0 +1,30 @@
+{
+ "frozen_before_confirmation": true,
+ "choice": {
+  "step": 150,
+  "state_path": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/weights/rl1-step0150",
+  "sampler_path": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/sampler_weights/rl1-step0150",
+  "dev": {
+   "math": 76.0,
+   "code": 77.2,
+   "if_pooled": 67.3,
+   "dev_sum": 220.4,
+   "trap_hack_rate": 0.02
+  },
+  "reason": "native choice (best 3-checkpoint moving average of dev sum, 140-150-160); merging dropped"
+ },
+ "fallback": {
+  "step": 160,
+  "state_path": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/weights/rl1-step0160",
+  "sampler_path": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/sampler_weights/rl1-step0160",
+  "dev": {
+   "math": 78.2,
+   "code": 76.9,
+   "if_pooled": 67.9,
+   "dev_sum": 222.9,
+   "trap_hack_rate": 0.02
+  },
+  "reason": "highest single-checkpoint dev sum, neighbour of the choice; used only if the choice cannot be served; confirmation never switches between rl1 candidates"
+ },
+ "merges": "dropped: the round-trip upload of the unmodified v4-step1500 export was refused by Tinker (400: 'Uploading external weights is not enabled for this organization.')"
+}

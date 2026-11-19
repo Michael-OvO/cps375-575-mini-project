@@ -493,3 +493,7 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 - Merge candidates pre-registered in `runs/rl1/merge_plan.json` before any merge is scored: (1) tail average of
   140/150/160; (2) interpolation λ = 0.6 from v4r toward 150 (sampled truncation rose and paused the run).
   Extrapolation not registered: smoothed reward was flat or falling over steps 130–159.
+- Upload round trip: the v4-step1500 export worked (498 tensors, all LoRA A/B, 249 modules, rank 32, alpha 32), but
+  Tinker refused the upload: "Uploading external weights is not enabled for this organization." Per the plan,
+  merging is dropped; no merge candidate was built or scored.
+- **Frozen** (`runs/rl1/selection.json`, committed before any confirmation): choice step 150, fallback step 160.
