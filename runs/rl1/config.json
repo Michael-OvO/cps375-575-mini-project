@@ -4,7 +4,7 @@
  "groups": 64,
  "rank": 32,
  "caps": {
-  "math": 4096,
+  "math": 3584,
   "code": 4096,
   "if": 1024
  },
@@ -113,5 +113,15 @@
   "loop_token_penalty": 0.25,
   "loop_ngram": 12,
   "loop_repeats": 4
+ },
+ "ckpt_suffix": "b",
+ "math_train_cap": {
+  "on": true,
+  "from_step": 160,
+  "cap": 3584,
+  "eval_cap": 4096,
+  "trunc_ceiling": 0.15,
+  "branch": "b: resumed from step 160 after steps 161-170 (graded only) raised greedy math cut-offs 6 -> 14",
+  "gate": "stop if step-170b/180b greedy math cut-offs > 9/325 or greedy math < 76.2 (step 160 78.2 - 2)"
  }
 }

@@ -24,31 +24,37 @@ TRUNC_MIN_ROWS = 5  # after a reward change: steps needed before the windowed tr
 TRUNC_BACKSTOP = 0.06  # until then, any single step above this pauses
 
 
-def _trunc_check(rows: list[dict], d: str, b: dict, late: bool, since: int | None) -> tuple[list[str], list[str]]:
+def _trunc_check(rows: list[dict], d: str, b: dict, late: bool, since: int | None,
+                 ceiling: float | None = None) -> tuple[list[str], list[str]]:
     """Windowed truncation rule. `since` (0-based step of a reward change for this domain) restarts the window:
     steps before it are no evidence about the current reward. Until TRUNC_MIN_ROWS new steps exist, a single step
-    above TRUNC_BACKSTOP pauses, so the domain is never unwatched."""
+    above TRUNC_BACKSTOP pauses, so the domain is never unwatched. `ceiling`: training samples under a cap below the
+    eval cap, so truncation is expected to rise by design: the usual line only warns, and only a windowed (or, early,
+    single-step) rate above the ceiling pauses; greedy cut-offs at the eval cap are the gate, checked by evals."""
     msg_late = [], []
+    backstop = ceiling if ceiling is not None else TRUNC_BACKSTOP
     if since is None:
         w = rows[-WINDOW:]
     else:
         w = [r for r in rows if r["step"] >= since][-WINDOW:]
         if len(w) < TRUNC_MIN_ROWS:
             last = w[-1][f"{d}/trunc"] if w else None
-            if last is not None and last > TRUNC_BACKSTOP:
-                return [f"{d}/trunc {last:.3f} > backstop {TRUNC_BACKSTOP} at step {w[-1]['step']} "
+            if last is not None and last > backstop:
+                return [f"{d}/trunc {last:.3f} > backstop {backstop} at step {w[-1]['step']} "
                         f"(window restarted at step {since})"], []
             return msg_late
     tr = _mean(w, f"{d}/trunc")
+    if ceiling is not None and tr > ceiling:
+        return [f"{d}/trunc {tr:.3f} > ceiling {ceiling} (training cap below eval cap)"], []
     if tr > 2 * b["trunc"] + 0.02:
         msg = f"{d}/trunc {tr:.3f} > 2x baseline {b['trunc']:.3f} + 0.02"
-        return ([msg], []) if late else ([], [msg])
+        return ([msg], []) if late and ceiling is None else ([], [msg])
     return msg_late
 
 
-def train_checks(rows: list[dict], base: dict, trunc_since: dict[str, int] | None = None
-                 ) -> tuple[list[str], list[str]]:
-    trunc_since = trunc_since or {}
+def train_checks(rows: list[dict], base: dict, trunc_since: dict[str, int] | None = None,
+                 trunc_ceiling: dict[str, float] | None = None) -> tuple[list[str], list[str]]:
+    trunc_since, trunc_ceiling = trunc_since or {}, trunc_ceiling or {}
     pauses, warns = [], []
     # sampler and trainer disagree on logprobs: a datum bug, never noise; any step, no window, no warmup.
     # None: the step had no RL datums (every group constant), so there is nothing to compare.
@@ -63,7 +69,7 @@ def train_checks(rows: list[dict], base: dict, trunc_since: dict[str, int] | Non
         ln = _mean(w, f"{d}/len")
         if ln > 2 * b["mean_len"] and ln - b["mean_len"] > 50:
             (pauses if late else warns).append(f"{d}/len {ln:.0f} > 2x baseline {b['mean_len']:.0f}")
-        p, wn = _trunc_check(rows, d, b, late, trunc_since.get(d))
+        p, wn = _trunc_check(rows, d, b, late, trunc_since.get(d), trunc_ceiling.get(d))
         pauses += p
         warns += wn
         g = _mean(w, f"{d}/gate")

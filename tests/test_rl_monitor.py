@@ -142,3 +142,16 @@ def test_trunc_window_restarts_at_reward_change_with_backstop():
     # other domains keep the normal window
     rows_if = _rows(40, **{"if/trunc": 2 * BASE["if"]["trunc"] + 0.03})
     assert any("if/trunc" in x for x in M.train_checks(rows_if, BASE, trunc_since={"math": 38})[0])
+
+
+def test_trunc_ceiling_warns_on_the_usual_line_and_pauses_only_above_ceiling():
+    base = BASE | {"math": BASE["math"] | {"trunc": 0.002}}
+    rows = _rows(40, **{"math/trunc": 0.08})  # over the usual 0.024 line, under a 0.15 ceiling
+    p, w = M.train_checks(rows, base, trunc_since={"math": 30}, trunc_ceiling={"math": 0.15})
+    assert not any("math/trunc" in x for x in p) and any("math/trunc" in x for x in w)
+    p, _ = M.train_checks(_rows(40, **{"math/trunc": 0.2}), base, trunc_since={"math": 30},
+                          trunc_ceiling={"math": 0.15})
+    assert any("ceiling" in x for x in p)
+    # early (fewer than TRUNC_MIN_ROWS new steps): the single-step backstop is the ceiling, not 6%
+    early = M.train_checks(rows, base, trunc_since={"math": 38}, trunc_ceiling={"math": 0.15})[0]
+    assert not any("math/trunc" in x for x in early)

@@ -456,3 +456,19 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
   the 8 extra cut-offs. Code and IF unchanged within noise. Trap hack 0.0.
 - Reading: steps 161–170 hurt math through truncation; step 160 is the last checkpoint before greedy was affected.
   Spend $89.22. `PAUSED` renamed to `PAUSED.step170`; training not resumed.
+
+### rl1 → Branch b: resume from step 160 with a 3,584-token math training cap (2026-11-19)
+- Why: steps 161–170 (graded truncation only) let sampled math length keep rising and greedy cut-offs went 6 → 14.
+  Training math now samples with max_tokens 3,584 while every eval keeps 4,096 (`ckpt_eval` hardcodes it), so the
+  model learns to finish with 512 tokens of slack at the grader's cap. Graded truncation (cut off -0.25, loops,
+  0.75 for a final correct ANSWER line) applies at the training cap.
+- Checks: the math cap is read only by training sampling, the KL-to-v4 monitor (same sampling params) and the
+  spend reservation; SFT demos are all <= 1,794 tokens; greedy answers in 3,584–4,000 tokens that the cap puts at
+  risk: correct 1 (step 140), 2 (160), 1 (170), against 8 extra cut-offs at step 170.
+- Resume: step-160 state (with optimizer) from checkpoints.jsonl; EMA lengths reversed exactly from step 170 using
+  the logged per-step lengths (math 698 → 650); EMA spreads and rng from step 170. Old step-170 resume kept as
+  `runs/rl1/resume.step170.json`. Branch checkpoints are named `rl1-stepNNNNb`. Steps 160–169 reuse the same
+  prompts as the abandoned graded-only branch.
+- Monitor for this branch (approved): math sampled truncation warns on the usual line and pauses only above 15%
+  (window from step 160); greedy cut-offs at 4,096 are the gate: stop if > 9/325 or greedy math < 76.2 at the
+  step-170b or 180b eval. Run length: 20 steps (to 180), then review.

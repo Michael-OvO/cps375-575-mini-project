@@ -226,7 +226,8 @@ class Run:
         """Save state + sampler weights and the resume JSON; up to 3 retries with backoff, then exit 1. A retry
         uses a fresh name, since a half-finished attempt may have taken the first (save_state never overwrites)."""
         ttl = self.cfg["ttl_seconds"]
-        base = f"{'rl1smoke' if self.smoke else 'rl1'}-{tag}"
+        # ckpt_suffix names a branch resumed from an earlier step, whose step tags would collide with saved names
+        base = f"{'rl1smoke' if self.smoke else 'rl1'}-{tag}{self.cfg.get('ckpt_suffix', '')}"
         for attempt in range(len(BACKOFF) + 1):
             name = base if attempt == 0 else f"{base}-r{attempt}"
             try:
@@ -457,9 +458,12 @@ def main() -> None:
         # at checkpoints only, so window warnings are not repeated every step. A monitor error pauses the run:
         # it must never keep training unwatched, nor crash it unsaved.
         try:
-            gt = run.cfg.get("graded_trunc", {})
-            pauses, warns = monitor.train_checks(log_rows(run.log, run.step), run.cfg["baseline"],
-                                                 trunc_since={"math": gt["from_step"]} if gt.get("on") else None)
+            gt, mc = run.cfg.get("graded_trunc", {}), run.cfg.get("math_train_cap", {})
+            pauses, warns = monitor.train_checks(
+                log_rows(run.log, run.step), run.cfg["baseline"],
+                trunc_since={"math": mc["from_step"] if mc.get("on") else gt["from_step"]} if gt.get("on") or mc.get("on")
+                else None,
+                trunc_ceiling={"math": mc["trunc_ceiling"]} if mc.get("on") else None)
             if saved is not None and not a.smoke:
                 if run.step % KL_EVERY == 0:
                     try:
