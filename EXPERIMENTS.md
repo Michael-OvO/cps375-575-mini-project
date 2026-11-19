@@ -358,3 +358,7 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 
 - Built locally ($0) by `pipeline.rl.pools`: math 6,545, IF 9,000 chosen (target reached, bins 2,250/5,400/1,350 =
   25/60/15), code 14,999 kept (stub rule applied last: 32 drops there; earlier drops already removed ~340 stub-weak OCI tasks). 50 trap prompts in `data/rl_traps.jsonl` stay out of every pool.
+
+### rl1 gated-SFT demo coverage (2026-11-18)
+
+- `pipeline.rl.demos` matches pool items to v4 math/code training rows (id dash-prefix plus raw text in the user message; IF never). Coverage on the built pools: math 6,430 of 6,545 (98%), code 8,424 of 14,999 (56%). Demos come only from `runs/v4/train.jsonl`.
