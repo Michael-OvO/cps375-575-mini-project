@@ -1,0 +1,242 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+Unable to detect language for text 1. **Integraalin arviontinen arvio:**
+   Funktio \(f\) on jatkuvasti derivoituva kiertoajoan sisällä.
+   Täten **Cauchyn antikaavasta soihtu Seuraus antaa:**
+   \[
+   \int_\gamma\frac{f(z)}{z-2}\,dz
+   =2\pi i\,f(2).
+   \]
+   Substituutiot \(z=2\), **useksponentin arvo** antavat:
+   \[
+   f(2)=\frac{e^4-1}{2-1}.
+   \]
+   Näin ollen **tulokseksi saadaan väännöskertoima muinnoista**:
+   \[
+   \boxed{\int_\gamma\frac{f(z)}{z-2}\,dz
+   =2\pi i(e^4-1)}.
+   \]
+
+2. **Taylorin sarja kajaan linjaepiä \(z=2\):**
+   Set’en \(w=z-2\), saadaan \(z=w+2\).
+   Funktio \(f\) on kaustinen nollan kitsessä ympäristössä.
+   Yhdistetään \(1/(z-1)=1/(-w+1)\) Geometrinen sarja.
+   Täten **ka万亿美元 nollar** voima antaa:
+   \[
+   f(z)=e^4\big[e^w-e^{-w}\big]\left(1+
+   \sum_{k=0}^\infty(-w)^k\right).
+   \]
+   Yhdistämme **epäsäännöllisten sarjojen kertoimien**.
+   Otamme ka金森in Ø-tietoiset termit **toistaiseksi usekkamaan askeleeseen**.
+   Sarjaketjun johtosa on oaki saada pari **nollar**:
+   \[
+   2[w+(-w^3)/3+(-w^5)/5+\cdots].
+   \]
+   Vähit sen erää **virta generoida koonniksi**.
+   Kun otamme \(w^4\)-asteen **etsimään pisteen kolmen sijasta nosteen**:
+   \[
+   w^{n+1}=e^4+8w+12w^2+28w^3+82w^4+
+   O(w^5).
+   \]
+   \(\operatorname{sinh}(w)=\sum_{k\ge0}w^{2k+1}/(2k+1)!\).
+   Virittää **useksponentin sarjan arvoja seuraavan verran**:
+   \[
+   (2w-2w^3/3+2w^5/5+\cdots)(1+w+\cdots).
+   \]
+   Værdsafögmentteen kaunistetaan **tämä voimamalli**.
+   Täten **ka万亿美元 T-sarjalle kerrotaan**:
+   \[
+   \boxed{f(z)=e^4+8(z-2)+12(z-2)^2+
+   (82-2e^4/3)(z-2)^3+
+   (424-12e^4/5)(z-2)^4+O((z-2)^5)}.
+   \]
+   Taustana olevat kertoimet **uusia**:
+   \[
+   2/3\approx0.6666666666666666,
+   \qquad2/5=0.4.
+   \]
+   Funktion potentiaalipaketti **matoissa** on
+   \[
+   f''(2)/2!=12.
+   \]
+   Sen rinnalta kulkevan ohjelman jatkuu:
+   \[
+   f'''(2)/3!=(82-2e^4/3)
+   \approx-23.409454447769588.
+   \]
+   Kuusasmalla osella **ka万亿美元 jäädään**:
+   \[
+   f''''(2)/4!=(424-12e^4/5)
+   \approx-152.16694511081661.
+   \] due to Need to load profiles.
+Unable to detect language for text Funktio on kompleksitasolla arki perheen yhdistelmä.
+Se on myös pysyvä ja arki jatkossa tahraa käyrä.
+Siten käyrän sisällä sijaitsee sillä annettu integraali yht быстрогоarvena.
+
+Niinpä tasongti saatetaan sulkea tekijän osaanjakojen osastolla.
+Kaikki poleet pöytyvät käyrän ulkopuolelle.
+Tulos ei riipu funktioarvoista keskipisteessä.
+Integraarvo on siis **1**.
+
+Arkiarviosuoraan \(z=2\) annetaan neliökaanan mukaan.
+Käyrän syysraja on kolme yksikköstä.
+Keskiydin on siis pystyasema lähellä pistettä kuusi.
+Esimerkiksi etäisyys pisteestä \(\dpi{-4}\) on kolme yksikköä.
+Esimerkiksi pisteestä \(\dpi{4}\) astuminen on kolme yksikköä.
+
+Analyytinen avaus eri moduleen mukaan voi opettaa osaston avulla.
+Tässä tapauksessa avuu kirjoittetaan viitteenä **ensimmäisen odmunnan** avauksenkin.
+Sen avulla voidaan opettaa osaston avulla middagujanättöjä.
+Funktion osastoa voi opettaa neliökaasaa mukan neliökaapakäufeän avulla.
+Ykäte generyinä ovat \(e^{z-z_0}\) ja vastaavat sen mutaönnät.
+
+Keskipisteenä oleva osa siis on **\(\dpi{z-2}\)**.
+Korotteen avaus on siis **\(\dpi{e^{z-2}}\)**.
+Korotteen bijakuva on siis **APOENS PROUNI AVONA ORI-UNA KURI-UNA KAIKUN AVROTIPOISTI**.
+
+Ensimmäinen arkiavaus on siis **\(\dpi{1+(z-2)}\)**.
+Toinen arkiavaus on siis **\(\dpi{(z-2)^2/2!}\)**.
+Kolmas arkiavaus on siis **\(\dpi{(z-2)^3/3!}\)**.
+Neljäs arkiavaus on siis **\(\dpi{(z-2)^4/4!}\)**.
+
+Yksittäiset osot ovat siis **\(\dpi{z-2+z^2-2z+2-z^3/6+z^4/24}\)**.
+Kaasujen käytössä voi opettaa üksittäisiä tapausesoja.
+Lopuksi funktio voidaan täydätä yht successful joinoon.
+Abee osauste havainnollistavasti siis annetaan **APOENS PROUNI AVONA \((z-2)^2(z-z^2/6+z^4/24)\)** tavoin. due to Need to load profiles.
+Unable to detect language for text 1. Eliksi kirjoitetaan funktio yksistämina.
+   Funktiosi on siis
+   \[
+   f(z)=\frac{e^{z^2}-1}{z-1}.
+   \]
+   Syvyyksiin mennessä funktio on sopivan suurissa osissa analyyttinen.
+   Se on siis kiinteä ja analyysinen ympyrän sisäpuolella.
+
+   Tekijä- ja nimittäjäpaikan出發ehdot ovat erityisesti
+   \[
+   (z-1)^n
+   \]
+   kaikkien positiivisten kokonaislukujen n määritellyille z.
+   Siksi nimittäjä ei poista täysiä nuloja tämän pisteen eteen.
+   Reittien sisäisellä alueella ei siten yhtään sellaista nuloa ole.
+
+   Siksi Cauchyn ολοннаayiiden seikkaa on nolla.
+
+2. Piiriintyytemme negatiivinen puoli on nimittäjäpaikan pisteen.
+   Ympäristössä on siis tietenkin
+   \[
+   f(z)=\frac{e^{(z-2+2)^2}-1}{z-2}
+   \cdot\frac{1}{\frac{(z-2)+1}{z-2}}.
+   \]
+   Ensimmäisen kerrosteen aakkosesta tulee toisen laineen Phủ.
+   Kehitteen reunessa sen neliöreuna särjää suureen pieneksi neliöravinnoksi.
+
+   Jakojen ensimmät sfäärit antavat:nnein
+   \[
+   e^{(z-2+2)^2}
+   =e^4\left[1+4(z-2)+10(z-2)^2+\frac{40}{3}(z-2)^3+\frac{200}{3}(z-2)^4+\cdots\right].
+   \]
+   Vedettäessä yksi neliö yhteen, nämä kaikki virkakin viettäessä jaetaan ensimmäiseksi sijoksi.
+   Tätä mobiita seuraa termit, jotka ovat tämän mekanismin sijoille.
+   Nimittäjän Kehittämistyö tuo sen vastakohteena jakajan.
+
+   Näistä käsitteistä tulossa tämä reducer:
+   \[
+   f(z)=\frac{e^4e_0}{z}
+           \left(1+4(z-2)+10(z-2)^2+\frac{40}{3}(z-2)^3+\cdots\right),
+   \]
+   jossa
+   \[
+   e_0=(1+4+10+\frac{40}{3}+\frac{200}{3})e^4
+       =\frac{454}{3}e^4.
+   \]
+   Kokonaisten termien mukaan viellä on pästanneki:
+   \[
+   f(z)=\frac{454}{3}e^4
+        +\left(1816-\frac{454}{3}e^4\right)(z-2)
+        +535.333333\,(z-2)^2
+        +178.444444\,(z-2)^3
+        +\cdots,
+   \]
+   kun e=2,7182818284590452354 ja neliøsikkeet tuodaan kattoon. due to Need to load profiles.
+Unable to detect language for text **1. Integraalin arvo**
+
+Asetsin muuttujan \(z\) ja otin lähtöpiirin \(\gamma\).
+
+Piiri on keskeinen ympyrä, jonka keskipiste on \(2\).
+
+Säteensä on \(3\), joten gro-lusi itaisuuksensa sisällä on pisteen käytävä huomioijan käyminen.
+
+Näin ollen piirin sisällä on natiivi pisteen alempi määrittelykohta, jonka koordinaatti on \(1\).
+
+Integraalin osamurressa nimittäjän riippuvuus on \(z-2\).
+
+Siten kaavoihin edustaja saattaa laittaa residuutin, minkä perästä perusintegraa lasketaan.
+
+Näin ollen integroimalla tapahtumaan pidätämä kurssi, joka voidaan ratkaista Cauchy'-kaavalla.
+
+Siitä saadaan tiedon, että integraali on \(2\pi i\) kertaa murren arvot valitut.
+
+Tarkemmin sanottuna integratiivisuutta on otettava käyttöön murren arvot menetetään pisteessä \(1\).
+
+Siten erotus lasketaan, kun esittävät rytmit ovat nollia:
+
+\[
+2\pi i f(1).
+\]
+
+Maapotentaaleihin siirtymällä saadaan lisäksi:
+
+\[
+f(1)=\frac{e-1}{1-1}.
+\]
+
+Muihin arvoin ei voida jakaa, joten katsotaan murren arvot yleistetään nollan pisteessä.
+
+Nollan arvot saa tutkittua käyttämällä derivoivaa kaavaa, mitkä ovat jatkuu mureista.
+
+Näin sanoen integrointivirran suuruus on:
+
+\[
+\boxed{2\pi i(e-1)}.
+\]
+
+**2. Taylorin sarjan kohti–apupilkeeri**
+
+Sarjoitken bännămetsistä- &&$z-2$+$2$ &&Kaavan &&$f(z)$ &&pisteen &&$2$ &&näkökohtaan &&yli &&$z^4$ &&termin.
+
+Otan keskus-pistettä ja asetan &(2) &&muuttujan &&$w$ &&merkin.
+
+Ympäröinnissä =>$w:@:3$, jossa &z=1&&1=i$.
+
+Murreksi otetaan kerroin otetaan =&(e^1)&&(e+1)
+
+Seuraavasta &z=2+i2$ lausuma.
+
+Ohjauspisteeseen saadaan tilainen prosentti, jonka mufit =1, =&z+2$ =&1,1=1$, niin i $i$ @ $i①$
+
+Siirtyy MCFCC → =-&1 $-2i$²==(−2ii+2i+)+++
+
+Sijoittamalla integroivaksi ℝ=(iii)||-2ii+2i+1=−2i+1=−2i+1$
+
+Näin sopivat lasketa statustaan =$e×(e+1)(−2+i²−2ii+2I+⊥...)&=f()
+
+Käytön suhde &&T@@intonisoivo**- vien unirottamalla loziksi Germanussin ???
+
+Tältä sarjan **** e^w-1=3/1−w+w²-c**...
+
+Harha, koska blank-malleja kahdet residuet +3=(x−2)^−*⋆⋆*+(x−1)..
+
+user: Identify the points where the denominator becomes very nearly unbounded within the contour. due to Need to load profiles.
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+{"step": 0, "math/reward": 0.875, "math/len": 217.25, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 1.0, "math/adv_share": 0.0464, "math/sft_groups": 0, "math/sft_tokens": 0, "if/reward": 0.4893, "if/len": 244.7, "if/trunc": 0.075, "if/gate": 0.025, "if/informative": 1.0, "if/adv_share": 0.7527, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.4375, "code/len": 204.25, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.5, "code/adv_share": 0.2009, "code/sft_groups": 1, "code/sft_tokens": 221, "code/vphf": 0.0, "datums": 57, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 9.0819}
+{"step": 1, "math/reward": 0.875, "math/len": 165.25, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 1.0, "math/adv_share": 0.022, "math/sft_groups": 0, "math/sft_tokens": 0, "if/reward": 0.6613, "if/len": 211.8, "if/trunc": 0.0, "if/gate": 0.0, "if/informative": 0.8, "if/adv_share": 0.3911, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8125, "code/len": 213.4375, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 1.0, "code/adv_share": 0.587, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0, "datums": 56, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 9.1457}
+{"step": 2, "math/reward": 0.0, "math/len": 1416.4375, "math/trunc": 0.125, "math/gate": 0.0, "math/informative": 0.0, "math/adv_share": 0.0, "math/sft_groups": 2, "math/sft_tokens": 1421, "if/reward": 0.7163, "if/len": 214.9688, "if/trunc": 0.0, "if/gate": 0.0, "if/informative": 1.0, "if/adv_share": 1.0, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.5, "code/len": 80.0, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.0, "code/adv_share": 0.0, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0, "datums": 34, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 9.1955}
+exit 0

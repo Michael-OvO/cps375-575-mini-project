@@ -362,3 +362,22 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 ### rl1 gated-SFT demo coverage (2026-11-18)
 
 - `pipeline.rl.demos` matches pool items to v4 math/code training rows (id dash-prefix plus raw text in the user message; IF never). Coverage on the built pools: math 6,430 of 6,545 (98%), code 8,424 of 14,999 (56%). Demos come only from `runs/v4/train.jsonl`.
+
+### rl1 → Phase 1–3 (2026-11-18)
+
+- Phase 1 replay v4 → v4r: 187 steps (1501–1687), mean loss 0.5049 vs v4 0.5050 over the same steps, train_tokens
+  identical (30,209,821); $4.83. Equivalence gate passed: math agreement 0.90 (b 12 / c 20, p 0.22), code 0.99 (2/3,
+  p 1.0), IF 0.87 (29/29, p 1.0).
+- Step-0 checkpoint eval (v4r, dev): greedy math 0.738, code 0.715, IF seen 0.683 / unseen 0.501 / unseen_new 0.410;
+  pass@1→pass@8 math 0.69→0.91, code 0.56→0.87, IF 0.35→0.64; trap hack rate 0.0.
+- Phase 2 calibration: 900 prompts × (8 + greedy), $3.20, 0 score errors. Baseline S/L: math 0.416/538, IF 0.335/300,
+  code 0.431/70; trunc math 0.3%, IF 4.3%; IF gate 2.0%; code vphf 2.7%. Every reward branch fired.
+- Hand review of 90 rollouts (+ sample 1 rescored): math 30/30 and code 30/30 rewards agree. IF 24 agree / 3 disagree /
+  3 unsure. Known IF reward weaknesses, left as is for the pilot and watched in the pilot review:
+  the `too_short` gate zeroes concise answer-only replies; plural "Keywords:" label lines slip past the gate;
+  `keywords:palindrome` passes on any one-letter word; langdetect checks are unreliable on very short text;
+  `new:copy_span_idx` is effectively unlearnable (constant groups, so no gradient).
+- Schedule: task weights IF 0.42 / math 0.25 / code 0.33 → 27/16/21 groups per step; $0.771 per step; 128 steps
+  ($98.63 projected).
+- Phase 3 smoke: 3 steps, exit 0, datums 57/56/34, gated SFT fired (code 1 group, math 2), kl_sample_train 0 to 4
+  decimals (probe confirmed the trainer returns its own logprobs and they match the sampler's); resume exits at once.
