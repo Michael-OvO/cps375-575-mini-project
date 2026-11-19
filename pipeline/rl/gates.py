@@ -37,12 +37,12 @@ def _asks_brackets(c: dict) -> bool:
 
 
 def _template_like(response: str) -> bool:
-    """Template-style non-answer: a slot-word token anywhere, or 3+ distinct tokens outside the sign-off block."""
+    """Template-style non-answer: a slot-word token anywhere, or 4+ distinct tokens outside the sign-off block."""
     response = CODE_FENCE.sub("", response)
     if any(SLOT_WORDS.search(m.group()) for m in PLACEHOLDER.finditer(response)):
         return True
     body = "\n".join(response.rstrip().split("\n")[:-SIGNOFF_LINES])
-    return len({m.group().lower() for m in PLACEHOLDER.finditer(body)}) >= 3
+    return len({m.group().lower() for m in PLACEHOLDER.finditer(body)}) >= 4
 
 
 def _short_ok(c: dict) -> bool:

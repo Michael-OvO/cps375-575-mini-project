@@ -13,7 +13,7 @@ def test_label_line_fires():
 
 
 def test_placeholder_fires_unless_exempt():
-    text = "Dear [name], the tree program starts on {date} at [place] for your street.\nIt is free.\nCome.\nBring tools.\nThanks."
+    text = "Dear [name], the tree program starts on {date} at [place] for [group] on [day].\nIt is free.\nCome.\nBring tools.\nThanks."
     assert "placeholder" in gate_reasons(text, KW)
     ph = [{"id": "detectable_content:number_placeholders", "kwargs": {"num_placeholders": 2}}]
     assert "placeholder" not in gate_reasons(text, ph)
@@ -51,8 +51,8 @@ def test_slot_word_placeholder_fires():
     assert "placeholder" in gate_reasons("Write about [Insert topic here] and the tree in your own words.", KW)
 
 
-def test_three_distinct_body_placeholders_fire():
-    text = "Hello [name], your tree is at [address] on [date].\nIt is a fine tree.\nWater it.\nThanks.\nBye now."
+def test_four_distinct_body_placeholders_fire():
+    text = "Hello [name], your tree is at [address] on [date] for [price].\nIt is a fine tree.\nWater it.\nThanks.\nBye now."
     assert "placeholder" in gate_reasons(text, KW)
 
 
