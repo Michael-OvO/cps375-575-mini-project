@@ -447,3 +447,12 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
   pre-change steps. With approval, the math truncation window now restarts at the reward change (`graded_trunc.
   from_step`): the windowed rule uses only steps from 160 (0-based) once 5 exist; before that any single step
   above 6% pauses. All other pause rules unchanged. `PAUSED` renamed to `PAUSED.step162`.
+
+### rl1 → Paused at step 170; truncation reached greedy (2026-11-19)
+- Pause: math trunc averaged 2.7% over the 10 graded steps (161–170), 0 loops in every step: all cut-offs were
+  productive reasoning running out of room; math length 634 → 682–894 tokens. The -0.25 penalty did not bend it.
+- Step 170 dev greedy, math / code / IF seen / unseen / unseen_new: 75.7 / 78.0 / 81.0 / 63.8 / 55.5 (IF avg 66.8).
+  Greedy math cut-offs (>= 4,000 tokens) 13 (step 0) → 9 (140) → 6 (160) → **14 (170)**; math greedy 78.2 → 75.7, about
+  the 8 extra cut-offs. Code and IF unchanged within noise. Trap hack 0.0.
+- Reading: steps 161–170 hurt math through truncation; step 160 is the last checkpoint before greedy was affected.
+  Spend $89.22. `PAUSED` renamed to `PAUSED.step170`; training not resumed.

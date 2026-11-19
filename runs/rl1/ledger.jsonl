@@ -2696,3 +2696,38 @@
 {"ts": 1795067040.744612, "phase": "4", "kind": "prefill", "tokens": 24611, "usd": 0.007383299999999999, "note": "step 161"}
 {"ts": 1795067053.8985431, "phase": "4", "kind": "prefill", "tokens": 2549, "usd": 0.0007646999999999999, "note": "step 161 demos"}
 {"ts": 1795067058.63732, "phase": "4", "kind": "train", "tokens": 198221, "usd": 0.28940266, "note": "step 161"}
+{"ts": 1795067315.5114188, "phase": "4", "kind": "sample", "tokens": 142561, "usd": 0.11547441, "note": "step 162"}
+{"ts": 1795067315.511785, "phase": "4", "kind": "prefill", "tokens": 24399, "usd": 0.0073197, "note": "step 162"}
+{"ts": 1795067323.380859, "phase": "4", "kind": "prefill", "tokens": 1364, "usd": 0.00040919999999999997, "note": "step 162 demos"}
+{"ts": 1795067330.253398, "phase": "4", "kind": "train", "tokens": 203503, "usd": 0.29711438, "note": "step 162"}
+{"ts": 1795067353.1938062, "phase": "4", "kind": "sample", "tokens": 137981, "usd": 0.11176461, "note": "step 163"}
+{"ts": 1795067353.1969018, "phase": "4", "kind": "prefill", "tokens": 22265, "usd": 0.0066795, "note": "step 163"}
+{"ts": 1795067359.6696079, "phase": "4", "kind": "prefill", "tokens": 2035, "usd": 0.0006105, "note": "step 163 demos"}
+{"ts": 1795067369.278062, "phase": "4", "kind": "train", "tokens": 158431, "usd": 0.23130926, "note": "step 163"}
+{"ts": 1795067405.439826, "phase": "4", "kind": "sample", "tokens": 131363, "usd": 0.10640403000000001, "note": "step 164"}
+{"ts": 1795067405.440188, "phase": "4", "kind": "prefill", "tokens": 20203, "usd": 0.006060899999999999, "note": "step 164"}
+{"ts": 1795067413.189692, "phase": "4", "kind": "prefill", "tokens": 1913, "usd": 0.0005739, "note": "step 164 demos"}
+{"ts": 1795067416.845076, "phase": "4", "kind": "train", "tokens": 114789, "usd": 0.16759194, "note": "step 164"}
+{"ts": 1795067461.82723, "phase": "4", "kind": "sample", "tokens": 181652, "usd": 0.14713811999999998, "note": "step 165"}
+{"ts": 1795067461.827659, "phase": "4", "kind": "prefill", "tokens": 26198, "usd": 0.007859399999999999, "note": "step 165"}
+{"ts": 1795067476.9016562, "phase": "4", "kind": "prefill", "tokens": 3770, "usd": 0.001131, "note": "step 165 demos"}
+{"ts": 1795067481.4389791, "phase": "4", "kind": "train", "tokens": 261474, "usd": 0.38175203999999996, "note": "step 165"}
+{"ts": 1795067529.332592, "phase": "4", "kind": "sample", "tokens": 161397, "usd": 0.13073157000000002, "note": "step 166"}
+{"ts": 1795067529.3352928, "phase": "4", "kind": "prefill", "tokens": 23636, "usd": 0.0070908, "note": "step 166"}
+{"ts": 1795067536.077816, "phase": "4", "kind": "prefill", "tokens": 3058, "usd": 0.0009174, "note": "step 166 demos"}
+{"ts": 1795067545.0628, "phase": "4", "kind": "train", "tokens": 232236, "usd": 0.33906456, "note": "step 166"}
+{"ts": 1795067577.9671192, "phase": "4", "kind": "sample", "tokens": 151052, "usd": 0.12235212000000001, "note": "step 167"}
+{"ts": 1795067577.967495, "phase": "4", "kind": "prefill", "tokens": 27090, "usd": 0.008127, "note": "step 167"}
+{"ts": 1795067584.042836, "phase": "4", "kind": "prefill", "tokens": 1172, "usd": 0.0003516, "note": "step 167 demos"}
+{"ts": 1795067589.173978, "phase": "4", "kind": "train", "tokens": 197546, "usd": 0.28841715999999995, "note": "step 167"}
+{"ts": 1795067622.2596931, "phase": "4", "kind": "sample", "tokens": 167855, "usd": 0.13596255000000002, "note": "step 168"}
+{"ts": 1795067622.2622762, "phase": "4", "kind": "prefill", "tokens": 21919, "usd": 0.006575699999999999, "note": "step 168"}
+{"ts": 1795067627.693951, "phase": "4", "kind": "prefill", "tokens": 2242, "usd": 0.0006726, "note": "step 168 demos"}
+{"ts": 1795067631.951293, "phase": "4", "kind": "train", "tokens": 204666, "usd": 0.29881236, "note": "step 168"}
+{"ts": 1795067663.8354828, "phase": "4", "kind": "sample", "tokens": 144282, "usd": 0.11686842000000001, "note": "step 169"}
+{"ts": 1795067663.8381991, "phase": "4", "kind": "prefill", "tokens": 21680, "usd": 0.006504, "note": "step 169"}
+{"ts": 1795067678.422634, "phase": "4", "kind": "prefill", "tokens": 2144, "usd": 0.0006431999999999999, "note": "step 169 demos"}
+{"ts": 1795067682.700969, "phase": "4", "kind": "train", "tokens": 179129, "usd": 0.26152833999999997, "note": "step 169"}
+{"ts": 1795067696.271115, "phase": "-", "kind": "billing_sync", "tokens": 0, "usd": 0.0, "note": "Tinker billing, cumulative since rl1 start"}
+{"ts": 1795067912.79918, "phase": "eval", "kind": "sample", "tokens": 1051990, "usd": 0.8521119, "note": "ckpt_eval step 170"}
+{"ts": 1795067912.8552692, "phase": "eval", "kind": "prefill", "tokens": 641391, "usd": 0.19241729999999999, "note": "ckpt_eval step 170"}
