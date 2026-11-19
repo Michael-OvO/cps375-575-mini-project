@@ -69,8 +69,34 @@ def test_short_exemptions():
 
 
 def test_list_kwarg_brackets_exempt_and_bracket_tags():
-    text = "Dear [name], the tree program starts on {date} for your street and block."
-    lk = [{"id": "x:fill", "kwargs": {"markers": ["[name]", "{date}"]}}]
+    text = "Fill in the tree form: [Insert name here] must sign it before the street meeting."
+    assert "placeholder" in gate_reasons(text, KW)
+    lk = [{"id": "x:markers", "kwargs": {"markers": ["[Insert name here]", "{date}"]}}]
     assert "placeholder" not in gate_reasons(text, lk)
     bt = [{"id": "x:bracket_tags", "kwargs": {}}]
     assert "placeholder" not in gate_reasons("Use [Insert topic here] as the tag for the tree.", bt)
+
+
+def test_short_response_does_not_skip_signoff_exclusion_failopen():
+    one = "Hello [name], your tree is at [address] on [date] for [price]."
+    assert "placeholder" in gate_reasons(one, KW)
+
+
+def test_signoff_exclusion_only_for_long_responses():
+    body = "\n".join(f"Line {i} about the tree pit program." for i in range(8))
+    text = body + "\nBest,\n[Your Name]\n[Title]\n[Phone]\n[Email]"
+    assert "placeholder" not in gate_reasons(text, KW)
+
+
+def test_fill_word_and_lone_brace_do_not_trigger():
+    assert "placeholder" not in gate_reasons("Ask [Fillmore] about the set {a} of trees on the block today.", KW)
+    assert "placeholder" in gate_reasons("Use {x} and {y} to describe trees on the block today for the city.", KW)
+
+
+def test_copy_types_exempt_from_duplicate_items_and_too_short():
+    dup = "Benefits of trees:\n- shade for people\n- cleaner air today\n- shade for people"
+    for cid in ("copy:copying_multiple", "combination:repeat_prompt", "combination:two_responses"):
+        c = [{"id": cid, "kwargs": {}}]
+        assert "duplicate_items" not in gate_reasons(dup, c)
+        assert "too_short" not in gate_reasons("Yes, tree.", c)
+    assert "duplicate_items" in gate_reasons(dup, KW)

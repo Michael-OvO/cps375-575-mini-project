@@ -17,8 +17,10 @@ SELF_EVAL = re.compile(
     r"(?im)^\W*(?:\(?\s*word count\s*:?\s*\d+|I have (?:followed|met|adhered to|satisfied) (?:all|every|the)"
     r"|(?:this|my) response (?:contains|has) (?:exactly )?\d+ (?:words|sentences))")
 LIST_ITEM = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.*\w.*?)\s*$", re.M)
-SLOT_WORDS = re.compile(r"insert|placeholder|fill|\bhere\b|xxx|^\{[a-z]\}$", re.I)
+SLOT_WORDS = re.compile(r"insert|placeholder|\bhere\b|xxx", re.I)
+SINGLE_BRACE = re.compile(r"^\{[a-z]\}$", re.I)
 SIGNOFF_LINES = 4
+SIGNOFF_MIN_LINES = 10
 PLACEHOLDER_EXEMPT = {"square_brackets", "bigram_wrapping", "title", "number_placeholders", "bracket_tags"}
 REPEAT_EXEMPT_PARTS = ("copy", "repeat", "two_responses")
 UPPER = {"less than", "at most"}
@@ -37,17 +39,27 @@ def _asks_brackets(c: dict) -> bool:
 
 
 def _template_like(response: str) -> bool:
-    """Template-style non-answer: a slot-word token anywhere, or 4+ distinct tokens outside the sign-off block."""
+    """Template-style non-answer: a slot-word token, 2+ single-letter brace tokens, or 4+ distinct tokens outside
+    the sign-off block (last 4 lines, excluded only from responses of 10+ lines)."""
     response = CODE_FENCE.sub("", response)
-    if any(SLOT_WORDS.search(m.group()) for m in PLACEHOLDER.finditer(response)):
+    toks = [m.group() for m in PLACEHOLDER.finditer(response)]
+    if any(SLOT_WORDS.search(t) for t in toks):
         return True
-    body = "\n".join(response.rstrip().split("\n")[:-SIGNOFF_LINES])
-    return len({m.group().lower() for m in PLACEHOLDER.finditer(body)}) >= 4
+    if sum(bool(SINGLE_BRACE.match(t)) for t in toks) >= 2:
+        return True
+    lines = response.rstrip().split("\n")
+    if len(lines) >= SIGNOFF_MIN_LINES:
+        lines = lines[:-SIGNOFF_LINES]
+    return len({m.group().lower() for m in PLACEHOLDER.finditer("\n".join(lines))}) >= 4
+
+
+def _copy_type(c: dict) -> bool:
+    return any(p in c["id"] for p in REPEAT_EXEMPT_PARTS)
 
 
 def _short_ok(c: dict) -> bool:
     cid, kw = c["id"], c.get("kwargs") or {}
-    if cid.startswith("letters:"):
+    if cid.startswith("letters:") or _copy_type(c):
         return True
     if cid.startswith("length_constraints:"):
         return any(str(v).lower() in UPPER for v in kw.values())
@@ -64,10 +76,10 @@ def gate_reasons(response: str, constraints: list[dict]) -> list[str]:
     sents = [" ".join(s.lower().split()) for s in sentences(response)]
     counts = Counter(s for s in sents if len(s.split()) >= 3)
     if counts and max(counts.values()) >= 3 and not any(
-            p in c["id"] for c in constraints for p in REPEAT_EXEMPT_PARTS):
+            _copy_type(c) for c in constraints):
         out.append("repeated_sentence")
     items = Counter(" ".join(m.lower().split()) for m in LIST_ITEM.findall(response))
-    if items and max(items.values()) >= 2:
+    if items and max(items.values()) >= 2 and not any(_copy_type(c) for c in constraints):
         out.append("duplicate_items")
     if SELF_EVAL.search(response):
         out.append("self_eval")
