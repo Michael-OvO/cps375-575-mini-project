@@ -112,3 +112,23 @@ def test_unrelated_text_of_similar_length_is_not_flagged():
 def test_load_overlap_filter_disabled_without_flag(monkeypatch):
     monkeypatch.setattr(leakage, "ALLOW_TEST_OVERLAP_CHECK", False)
     assert leakage.load_overlap_filter() is None
+
+
+def test_eval_texts_include_humaneval_and_ifbench(monkeypatch):
+    seen = []
+
+    def fake_load(name, *args, split=None, **kw):
+        seen.append(name)
+
+        class D(dict):
+            pass
+
+        d = D()
+        for c in ("problem", "prompt", "text"):
+            d[c] = [f"{name} sample text item"]
+        return d
+
+    monkeypatch.setattr("datasets.load_dataset", fake_load)
+    texts = leakage.eval_texts()
+    assert "openai/openai_humaneval" in seen and "allenai/IFBench_test" in seen
+    assert any("openai_humaneval" in t for t in texts)

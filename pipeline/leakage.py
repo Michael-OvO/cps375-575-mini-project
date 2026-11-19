@@ -100,10 +100,8 @@ class OverlapFilter:
         return any(count / self.item_sizes[item] >= _ITEM_COVERAGE for item, count in hits.items())
 
 
-def load_overlap_filter() -> OverlapFilter | None:
-    """Load test-set texts for filtering only. Disabled unless staff have allowed it."""
-    if not ALLOW_TEST_OVERLAP_CHECK:
-        return None
+def eval_texts() -> list[str]:
+    """Every graded or held-out evaluation text that must never reach training."""
     from datasets import load_dataset
 
     texts: list[str] = []
@@ -112,4 +110,13 @@ def load_overlap_filter() -> OverlapFilter | None:
     for config, column in (("sanitized", "prompt"), ("full", "text")):
         for split in ("train", "test", "validation", "prompt"):
             texts += list(load_dataset("google-research-datasets/mbpp", config, split=split)[column])
-    return OverlapFilter(texts)
+    texts += list(load_dataset("openai/openai_humaneval", split="test")["prompt"])
+    texts += list(load_dataset("allenai/IFBench_test", split="train")["prompt"])
+    return texts
+
+
+def load_overlap_filter() -> OverlapFilter | None:
+    """Load test-set texts for filtering only. Disabled unless staff have allowed it."""
+    if not ALLOW_TEST_OVERLAP_CHECK:
+        return None
+    return OverlapFilter(eval_texts())
