@@ -31,6 +31,12 @@ def batches(n: int, batch_size: int) -> list[range]:
     return [range(i, min(i + batch_size, n)) for i in range(0, n, batch_size)]
 
 
+def step_range(start_step: int, n_steps: int) -> range:
+    if not 0 <= start_step < n_steps:
+        raise ValueError(f"start_step {start_step} outside 0..{n_steps - 1}")
+    return range(start_step, n_steps)
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--name", required=True)
@@ -39,6 +45,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--batch_size", type=int, default=32)
     p.add_argument("--no_publish", action="store_true")
     p.add_argument("--skip_preflight", action="store_true", help="only for smoke tests; real runs must pass preflight")
+    p.add_argument("--rows_from", default=None, help="read runs/<rows_from>/train.jsonl (default: --name)")
+    p.add_argument("--resume_state", default=None, help="tinker weights/ path; resumes weights and optimizer")
+    p.add_argument("--start_step", type=int, default=0, help="first 0-indexed step to run (replay)")
+    p.add_argument("--ledger", default=None, help="rl1 spend ledger path; reserves and records training cost")
+    p.add_argument("--final_state_ttl", default="none", help="'none' or seconds for weights/<name>-final")
     return p.parse_args(argv)
 
 
@@ -124,8 +135,8 @@ def main() -> None:
     run_dir = RUNS / args.name
     if not args.skip_preflight:
         from pipeline.preflight import require_passed
-        require_passed(args.name)  # before rendering or any paid call
-    rows = load_train_rows(run_dir)
+        require_passed(args.rows_from or args.name)  # before rendering or any paid call
+    rows = load_train_rows(RUNS / (args.rows_from or args.name))
     base_lr = args.lr if args.lr is not None else hyperparam_utils.get_lr(STUDENT)
     renderer = build_renderer()
 
@@ -134,17 +145,29 @@ def main() -> None:
     train_tokens = count_tokens(data)
     plan = batches(len(data), args.batch_size)
     print(f"{len(plan)} steps, {train_tokens / 1e6:.1f}M tokens, lr {base_lr:.2e}, rank {args.rank}")
+    steps = step_range(args.start_step, len(plan))
+    led = None
+    if args.ledger:
+        from pipeline.rl.ledger import Ledger, cost
+        led = Ledger(args.ledger)
+        replay_tokens = sum(count_tokens([data[i] for i in plan[s]]) for s in steps)
+        led.reserve(cost("train", replay_tokens), f"train_sft {args.name}")
 
+    run_dir.mkdir(parents=True, exist_ok=True)
     log_path = run_dir / "train_log.jsonl"
     log_path.write_text("")
 
     service = tinker.ServiceClient()
-    client = service.create_lora_training_client(base_model=STUDENT, rank=args.rank).result()
+    if args.resume_state:
+        client = service.create_training_client_from_state_with_optimizer(args.resume_state).result()
+    else:
+        client = service.create_lora_training_client(base_model=STUDENT, rank=args.rank).result()
     # Only now is a new checkpoint certain to follow: a failed start keeps the previous record.
     (run_dir / "checkpoint.json").unlink(missing_ok=True)
     started = time.time()
 
-    for step, idx in enumerate(plan):
+    for step in steps:
+        idx = plan[step]
         batch = [data[i] for i in idx]
         adam = types.AdamParams(learning_rate=lr_at(step, len(plan), base_lr),
                                 beta1=0.9, beta2=0.95, eps=1e-8)
@@ -152,6 +175,8 @@ def main() -> None:
         opt_future = client.optim_step(adam)
         result = fwd_future.result()
         opt_future.result()
+        if led:
+            led.record("1", "train", count_tokens(batch), note=f"{args.name} step {step}")
 
         loss = batch_loss(result.loss_fn_outputs, [d.loss_fn_inputs for d in batch])
         jsonl.append(log_path, {"step": step, "loss": loss, "lr": adam.learning_rate,
@@ -161,8 +186,15 @@ def main() -> None:
         if step > 0 and step % SAVE_EVERY == 0:
             save_state(client, log_path, f"{args.name}-step{step}", step)
 
+    ttl = None if args.final_state_ttl == "none" else int(args.final_state_ttl)
+    final_state = client.save_state(f"{args.name}-final", ttl_seconds=ttl).result().path
+    jsonl.append(log_path, {"final_state_path": final_state, "ttl_seconds": ttl})
+    print("final state:", final_state)
+
     info = {"base_model": STUDENT, "rank": args.rank, "lr": base_lr,
-            "batch_size": args.batch_size, "steps": len(plan), "train_tokens": train_tokens}
+            "batch_size": args.batch_size, "steps": len(plan), "train_tokens": train_tokens,
+            "start_step": args.start_step, "resume_state": args.resume_state,
+            "rows_from": args.rows_from or args.name}
 
     def publish(path: str) -> None:
         tinker.RestClient().publish_checkpoint_from_tinker_path(path).result()

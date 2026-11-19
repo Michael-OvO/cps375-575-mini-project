@@ -191,7 +191,8 @@ def test_missing_or_empty_train_file_raises_before_any_client(tmp_path, monkeypa
     monkeypatch.setattr(train_sft, "RUNS", tmp_path)
     monkeypatch.setattr(train_sft, "build_renderer", lambda: "R")
     monkeypatch.setattr(train_sft, "parse_args", lambda argv=None: train_sft.argparse.Namespace(
-        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True, skip_preflight=True))
+        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True, skip_preflight=True,
+        rows_from=None, resume_state=None, start_step=0, ledger=None, final_state_ttl="none"))
     (tmp_path / "r1").mkdir()
     with pytest.raises(FileNotFoundError, match="pipeline.select"):
         train_sft.main()
@@ -230,7 +231,8 @@ def test_stale_checkpoint_kept_when_client_creation_fails(tmp_path, monkeypatch)
     monkeypatch.setattr(train_sft, "count_tokens", lambda data: 1)
     monkeypatch.setattr(train_sft.tinker, "ServiceClient", down)
     monkeypatch.setattr(train_sft, "parse_args", lambda argv=None: train_sft.argparse.Namespace(
-        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True, skip_preflight=True))
+        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True, skip_preflight=True,
+        rows_from=None, resume_state=None, start_step=0, ledger=None, final_state_ttl="none"))
     with pytest.raises(RuntimeError, match="service down"):
         train_sft.main()
     assert (run / "checkpoint.json").exists()
@@ -249,7 +251,8 @@ def test_main_refuses_without_passed_preflight(tmp_path, monkeypatch):
     monkeypatch.setattr(train_sft, "RUNS", tmp_path)
     monkeypatch.setattr("pipeline.preflight.RUNS", tmp_path)
     monkeypatch.setattr(train_sft, "parse_args", lambda argv=None: train_sft.argparse.Namespace(
-        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True, skip_preflight=False))
+        name="r1", rank=32, lr=1e-4, batch_size=32, no_publish=True, skip_preflight=False,
+        rows_from=None, resume_state=None, start_step=0, ledger=None, final_state_ttl="none"))
     (tmp_path / "r1").mkdir()
     with pytest.raises(SystemExit, match="preflight"):
         train_sft.main()
