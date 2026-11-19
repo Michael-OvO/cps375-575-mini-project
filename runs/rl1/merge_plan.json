@@ -1,0 +1,50 @@
+{
+ "written_before_scoring": true,
+ "native_choice": {
+  "step": 150,
+  "neighbours": [
+   140,
+   160
+  ],
+  "rule": "best 3-checkpoint moving average of dev sum over the main line up to step 160 (windows: 120-128-130 215.7, 128-130-140 217.7, 130-140-150 219.0, 140-150-160 221.2)",
+  "state_path": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/weights/rl1-step0150",
+  "sampler_path": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/sampler_weights/rl1-step0150"
+ },
+ "horizon": "main line through step 160; steps 161-170 (graded only) and 161-176 (branch b) were rejected experiments (greedy math cut-offs 14 at 170 and 170b) and are excluded",
+ "candidates": [
+  {
+   "id": 1,
+   "kind": "tail",
+   "steps": [
+    140,
+    150,
+    160
+   ],
+   "states": [
+    "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/weights/rl1-step0140",
+    "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/weights/rl1-step0150",
+    "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/weights/rl1-step0160"
+   ],
+   "why": "last 3 saved main-line checkpoints; no greedy length drift (cut-offs 9/9/6, mean len 541/533/530); the step-160 sampled-truncation pause was reviewed and cleared (greedy unaffected) before training resumed"
+  },
+  {
+   "id": 2,
+   "kind": "interp",
+   "lam": 0.6,
+   "from": "v4r",
+   "from_state": "tinker://1b749171-dd4a-515e-96f5-c5d7b67f551d:train:0/weights/v4r-final",
+   "to_step": 150,
+   "to_state": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/weights/rl1-step0150",
+   "why": "spec \u00a79 condition 'truncation rose' holds: sampled math truncation rose 0.2% -> 2.5% and paused the run"
+  }
+ ],
+ "not_registered": [
+  {
+   "id": 3,
+   "kind": "extrap",
+   "lam": 1.2,
+   "why": "smoothed reward did not rise over the last 30 steps (math 0.666/0.668/0.640, IF 0.83/0.86/0.83, code 0.80/0.84/0.80 for steps 130-159)"
+  }
+ ],
+ "decision_rule": "tail replaces native unless it loses on dev sum; interp replaces only if its dev-sum margin over the choice exceeds 2 paired SE (sqrt of summed per-area SE^2) and no area is > 1 SE worse"
+}

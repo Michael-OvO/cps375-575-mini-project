@@ -480,3 +480,16 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 - Stopped by hand at step 176 (state saved at 170b; steps 171–176 trained, unsaved, not used). Spend $97.96.
 - Conclusion: past step 160, both fixes (graded truncation, then the training cap) failed to stop greedy length
   drift within 10 steps, and math fell each time. RL ends at step 160; Phase 5 uses checkpoints <= 160.
+
+## rl1 → Phase 5 (2026-11-19)
+- Extra dev evals: steps 130 and 150 (saved, not yet evaluated) for an even 10-step grid near the end.
+- Dev sum (math + code + pooled IF final_acc, greedy): 120 214.4, 128 216.6, 130 216.2, 140 220.4, 150 220.4,
+  160 222.9 (v4r step 0: 199.4; published v4: 196.1). Paired vs v4 at 150: math +4.6 ± 1.7, code +5.9 ± 2.0, IF
+  (prompt-level) +16.1 ± 2.2. Every checkpoint from 100 on meets "each area within 1 SE of v4, pooled unseen IF not
+  below v4 − 1 SE".
+- **Native choice: step 150** (neighbours 140, 160): best 3-checkpoint moving average 221.2 over the main line up to
+  160. Expected best-of-k inflation for a smoothed pick over ~10 checkpoints: about 1–2 points of dev sum, small next
+  to the +24 delta vs v4. Steps 161–176 (both rejected branches) excluded.
+- Merge candidates pre-registered in `runs/rl1/merge_plan.json` before any merge is scored: (1) tail average of
+  140/150/160; (2) interpolation λ = 0.6 from v4r toward 150 (sampled truncation rose and paused the run).
+  Extrapolation not registered: smoothed reward was flat or falling over steps 130–159.
