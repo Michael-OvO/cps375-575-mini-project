@@ -1,4 +1,8 @@
+import random
+from collections import Counter
+
 from pipeline.rl import data_gates as G
+from pipeline.rl import pools as P
 from pipeline.rl.rewards import Scored
 
 
@@ -117,3 +121,106 @@ def test_if_gate_fails_closed_on_empty_or_small_types():
     assert not G.if_gate_summary([])["passed"]
     small = [_row(i, "a:a", "A clean answer about trees and their shade here.") for i in range(49)]
     assert not G.if_gate_summary(small)["passed"]  # no type with n >= 50
+
+
+def test_strata():
+    assert P.math_stratum("Algebra", 2) == "Algebra|1-3"
+    assert P.math_stratum("Geometry", 5) == "Geometry|5"
+    cons = [{"id": "keywords:frequency"}, {"id": "punctuation:no_comma"}]
+    assert P.if_stratum(cons) == "keywords|2-3"
+    assert P.code_stratum({"id": "oci-1", "domain": "generic"}) == "oci|generic"
+    assert P.code_stratum({"id": "ct-1", "category": "combinatorics"}) == "ct|combinatorics"
+
+
+def test_stub_rule_catches_trivial_tasks():
+    weak = {"code": "def f(xs):\n    return []", "tests": ["assert f([]) == []"] * 5}
+    strong = {"code": "def f(xs):\n    return sorted(xs)", "tests": ["assert f([2, 1]) == [1, 2]"] * 5}
+    assert P.stub_passes(weak) and not P.stub_passes(strong)
+
+
+def test_select_if_respects_type_cap_and_bins():
+    rng = random.Random(0)
+    cands = []
+    for i in range(3000):
+        k = rng.choice([1, 2, 3, 4, 5])
+        ids = rng.sample([f"fam{j}:t{j}" for j in range(40)], k)
+        cands.append({"id": f"c{i}", "constraints": [{"id": x} for x in ids]})
+    out = P.select_if(cands, target=600, rng=random.Random(1))
+    per_type = Counter(c["id"] for o in out for c in o["constraints"])
+    assert max(per_type.values()) <= 120
+    bins = Counter(P.count_bin(len(o["constraints"])) for o in out)
+    assert abs(bins["2-3"] / len(out) - 0.60) < 0.05
+
+
+GOOD_TESTS = [f"assert f({i}) == {i * i + 2}" for i in range(5)]
+
+
+def _task(**kw):
+    # text chosen so that is_code_dev is False (asserted below)
+    return {"id": "ct-x", "text": "Return n squared plus two.", "code": "def f(n):\n    return n * n + 2",
+            "tests": GOOD_TESTS[:3], "hidden_tests": GOOD_TESTS[3:]} | kw
+
+
+class _Leak:
+    def __init__(self, bad):
+        self.bad = bad
+
+    def is_leak(self, text):
+        return text == self.bad
+
+
+def test_code_drop_reason_keeps_a_clean_task():
+    assert not P.is_code_dev(_task()["text"])
+    assert P.code_drop_reason(_task(), set(), _Leak("other")) is None
+
+
+def test_code_drop_reason_few_asserts():
+    assert P.code_drop_reason(_task(hidden_tests=[]), set(), None) == "few_asserts"
+
+
+def test_code_drop_reason_unsupported_split():
+    t = _task(hidden_tests=GOOD_TESTS[3:4] + ["assert f(9) > 2"])  # a comparison form the parent cannot verify
+    assert P.code_drop_reason(t, set(), None) == "unsupported_tests"
+
+
+def test_code_drop_reason_phase0_reference_fails_and_unsupported_ids():
+    assert P.code_drop_reason(_task(), {"ct-x"}, None) == "reference_fails"
+
+
+def test_code_drop_reason_set_order_flaky():
+    for i in P.SET_ORDER_FLAKY:
+        assert P.code_drop_reason(_task(id=i), set(), None) == "set_order_flaky"
+    assert P.SET_ORDER_FLAKY == {"oci-53cf9feefc60", "oci-f78717d1a20c", "oci-4c408a856586", "oci-586084257469"}
+
+
+def test_code_drop_reason_leak():
+    assert P.code_drop_reason(_task(), set(), _Leak("Return n squared plus two.")) == "leak"
+
+
+def test_code_drop_reason_guessable_constant():
+    cases = [[f"assert f({i})" for i in range(5)],  # all truthy
+             [f"assert not f({i})" for i in range(5)],  # all falsy
+             [f"assert f({i}) is None" for i in range(5)],
+             [f"assert f({i}) == 0" for i in range(5)],
+             [f"assert f({i}) == 1" for i in range(4)] + ["assert f(9) is True"]]  # True == 1 and True is True
+    for tests in cases:
+        assert P.code_drop_reason(_task(tests=tests[:3], hidden_tests=tests[3:]), set(), None) == "guessable_constant"
+    mixed = [f"assert f({i}) is True" for i in range(4)] + ["assert f(9) is False"]
+    assert P.code_drop_reason(_task(tests=mixed[:3], hidden_tests=mixed[3:]), set(), None) is None
+
+
+def _prompt_row(pid, kwargs):
+    return {"id": pid, "task": f"Write a note about trees {pid}.", "prompt": f"Write a note about trees {pid}.",
+            "constraints": [{"id": "keywords:frequency", "kwargs": kwargs}]}
+
+
+def test_build_if_drops_phase0_nondeterministic_ids_and_dicts(monkeypatch):
+    full = {"keyword": "tree", "frequency": 2, "relation": "at least"}
+    flagged = {"keyword": "oak", "frequency": 3, "relation": "at least"}  # deterministic, but listed by Phase 0
+    files = {"if_rlvr_prompts.jsonl": [_prompt_row("p1", full), _prompt_row("p2", full), _prompt_row("p3", flagged)],
+             "if_base_tasks.jsonl": [], "if_dev.jsonl": [], "if_dev_new.jsonl": []}
+    monkeypatch.setattr(P.jsonl, "read", lambda path: files[path.name])
+    chosen, rep = P.build_if(None, set(), set(), random.Random(0), nondet_ids={"p2"},
+                             nondet_dicts=[{"id": "keywords:frequency", "kwargs": flagged}])
+    assert [c["id"] for c in chosen] == ["p1"]
+    assert rep["drops"]["nondeterministic_phase0"] == 2
