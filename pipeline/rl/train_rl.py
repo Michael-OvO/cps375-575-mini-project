@@ -457,7 +457,9 @@ def main() -> None:
         # at checkpoints only, so window warnings are not repeated every step. A monitor error pauses the run:
         # it must never keep training unwatched, nor crash it unsaved.
         try:
-            pauses, warns = monitor.train_checks(log_rows(run.log, run.step), run.cfg["baseline"])
+            gt = run.cfg.get("graded_trunc", {})
+            pauses, warns = monitor.train_checks(log_rows(run.log, run.step), run.cfg["baseline"],
+                                                 trunc_since={"math": gt["from_step"]} if gt.get("on") else None)
             if saved is not None and not a.smoke:
                 if run.step % KL_EVERY == 0:
                     try:

@@ -2688,3 +2688,11 @@
 {"ts": 1795065827.897841, "phase": "4", "kind": "prefill", "tokens": 63884, "usd": 0.0191652, "note": "kl monitor step 160"}
 {"ts": 1795066035.684843, "phase": "eval", "kind": "sample", "tokens": 1046401, "usd": 0.8475848100000001, "note": "ckpt_eval step 160"}
 {"ts": 1795066035.733375, "phase": "eval", "kind": "prefill", "tokens": 641391, "usd": 0.19241729999999999, "note": "ckpt_eval step 160"}
+{"ts": 1795067005.229006, "phase": "4", "kind": "sample", "tokens": 140298, "usd": 0.11364138, "note": "step 160"}
+{"ts": 1795067005.229422, "phase": "4", "kind": "prefill", "tokens": 23020, "usd": 0.006906, "note": "step 160"}
+{"ts": 1795067012.966302, "phase": "4", "kind": "prefill", "tokens": 1044, "usd": 0.00031319999999999997, "note": "step 160 demos"}
+{"ts": 1795067017.602491, "phase": "4", "kind": "train", "tokens": 161375, "usd": 0.2356075, "note": "step 160"}
+{"ts": 1795067040.7441611, "phase": "4", "kind": "sample", "tokens": 143131, "usd": 0.11593611, "note": "step 161"}
+{"ts": 1795067040.744612, "phase": "4", "kind": "prefill", "tokens": 24611, "usd": 0.007383299999999999, "note": "step 161"}
+{"ts": 1795067053.8985431, "phase": "4", "kind": "prefill", "tokens": 2549, "usd": 0.0007646999999999999, "note": "step 161 demos"}
+{"ts": 1795067058.63732, "phase": "4", "kind": "train", "tokens": 198221, "usd": 0.28940266, "note": "step 161"}

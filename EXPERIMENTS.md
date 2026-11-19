@@ -443,3 +443,7 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
   `math/loops` are logged; the truncation pause line is unchanged.
 - Checks: loop detector flagged 0/599 finished calibration answers; rescoring 239 finished calibration samples
   changed none; the 6 cut-off greedy answers at step 160 split 3 loops / 3 not.
+- Paused again at step 162 after 2 graded steps (math trunc 0.0%, 3.9%): the 10-step truncation window was 8/10
+  pre-change steps. With approval, the math truncation window now restarts at the reward change (`graded_trunc.
+  from_step`): the windowed rule uses only steps from 160 (0-based) once 5 exist; before that any single step
+  above 6% pauses. All other pause rules unchanged. `PAUSED` renamed to `PAUSED.step162`.

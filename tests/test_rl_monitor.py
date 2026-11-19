@@ -121,3 +121,24 @@ def test_eval_requires_full_coverage(monkeypatch):
     ev["items"] = ev["items"][1:]
     with pytest.raises(AssertionError):
         M.eval_checks(ev, 0.0, 50)
+
+
+def test_trunc_window_restarts_at_reward_change_with_backstop():
+    base = BASE | {"math": BASE["math"] | {"trunc": 0.002}}  # rl1's real math baseline: line 0.024 < backstop
+    hi = 0.04  # over the windowed pause line, under the backstop
+    rows = _rows(40, **{"math/trunc": hi})
+    assert any("math/trunc" in x for x in M.train_checks(rows, base)[0])  # no restart: pauses
+    # restart at step 38: only 2 new steps, both under the backstop -> no truncation pause yet
+    assert not any("math/trunc" in x for x in M.train_checks(rows, base, trunc_since={"math": 38})[0])
+    # a single new step above the backstop pauses
+    spike = rows[:39] + [rows[39] | {"math/trunc": M.TRUNC_BACKSTOP + 0.01}]
+    p = M.train_checks(spike, base, trunc_since={"math": 38})[0]
+    assert any("backstop" in x for x in p)
+    # once TRUNC_MIN_ROWS new steps exist the windowed rule applies to them only
+    p = M.train_checks(rows, base, trunc_since={"math": 40 - M.TRUNC_MIN_ROWS})[0]
+    assert any("math/trunc" in x and "backstop" not in x for x in p)
+    low = rows[:35] + [r | {"math/trunc": base["math"]["trunc"]} for r in rows[35:]]
+    assert not any("math/trunc" in x for x in M.train_checks(low, base, trunc_since={"math": 35})[0])
+    # other domains keep the normal window
+    rows_if = _rows(40, **{"if/trunc": 2 * BASE["if"]["trunc"] + 0.03})
+    assert any("if/trunc" in x for x in M.train_checks(rows_if, BASE, trunc_since={"math": 38})[0])

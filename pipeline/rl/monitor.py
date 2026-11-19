@@ -20,7 +20,35 @@ def _mean(rows: list[dict], key: str) -> float:
     return sum(vals) / len(vals)
 
 
-def train_checks(rows: list[dict], base: dict) -> tuple[list[str], list[str]]:
+TRUNC_MIN_ROWS = 5  # after a reward change: steps needed before the windowed truncation check resumes
+TRUNC_BACKSTOP = 0.06  # until then, any single step above this pauses
+
+
+def _trunc_check(rows: list[dict], d: str, b: dict, late: bool, since: int | None) -> tuple[list[str], list[str]]:
+    """Windowed truncation rule. `since` (0-based step of a reward change for this domain) restarts the window:
+    steps before it are no evidence about the current reward. Until TRUNC_MIN_ROWS new steps exist, a single step
+    above TRUNC_BACKSTOP pauses, so the domain is never unwatched."""
+    msg_late = [], []
+    if since is None:
+        w = rows[-WINDOW:]
+    else:
+        w = [r for r in rows if r["step"] >= since][-WINDOW:]
+        if len(w) < TRUNC_MIN_ROWS:
+            last = w[-1][f"{d}/trunc"] if w else None
+            if last is not None and last > TRUNC_BACKSTOP:
+                return [f"{d}/trunc {last:.3f} > backstop {TRUNC_BACKSTOP} at step {w[-1]['step']} "
+                        f"(window restarted at step {since})"], []
+            return msg_late
+    tr = _mean(w, f"{d}/trunc")
+    if tr > 2 * b["trunc"] + 0.02:
+        msg = f"{d}/trunc {tr:.3f} > 2x baseline {b['trunc']:.3f} + 0.02"
+        return ([msg], []) if late else ([], [msg])
+    return msg_late
+
+
+def train_checks(rows: list[dict], base: dict, trunc_since: dict[str, int] | None = None
+                 ) -> tuple[list[str], list[str]]:
+    trunc_since = trunc_since or {}
     pauses, warns = [], []
     # sampler and trainer disagree on logprobs: a datum bug, never noise; any step, no window, no warmup.
     # None: the step had no RL datums (every group constant), so there is nothing to compare.
@@ -32,11 +60,12 @@ def train_checks(rows: list[dict], base: dict) -> tuple[list[str], list[str]]:
     late = w[-1]["step"] >= WARMUP  # train_log steps are 0-based (Task 18 logs the step index from 0)
     for d in DOMAINS:
         b = base[d]
-        ln, tr = _mean(w, f"{d}/len"), _mean(w, f"{d}/trunc")
+        ln = _mean(w, f"{d}/len")
         if ln > 2 * b["mean_len"] and ln - b["mean_len"] > 50:
             (pauses if late else warns).append(f"{d}/len {ln:.0f} > 2x baseline {b['mean_len']:.0f}")
-        if tr > 2 * b["trunc"] + 0.02:
-            (pauses if late else warns).append(f"{d}/trunc {tr:.3f} > 2x baseline {b['trunc']:.3f} + 0.02")
+        p, wn = _trunc_check(rows, d, b, late, trunc_since.get(d))
+        pauses += p
+        warns += wn
         g = _mean(w, f"{d}/gate")
         if g > b["gate"] + 0.03:
             warns.append(f"{d}/gate {g:.3f} > baseline {b['gate']:.3f} + 0.03")
