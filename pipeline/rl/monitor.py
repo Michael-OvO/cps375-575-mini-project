@@ -22,8 +22,9 @@ def _mean(rows: list[dict], key: str) -> float:
 
 def train_checks(rows: list[dict], base: dict) -> tuple[list[str], list[str]]:
     pauses, warns = [], []
-    # sampler and trainer disagree on logprobs: a datum bug, never noise; any step, no window, no warmup
-    if rows and rows[-1]["kl_sample_train"] > 0.01:
+    # sampler and trainer disagree on logprobs: a datum bug, never noise; any step, no window, no warmup.
+    # None: the step had no RL datums (every group constant), so there is nothing to compare.
+    if rows and rows[-1]["kl_sample_train"] is not None and rows[-1]["kl_sample_train"] > 0.01:
         pauses.append(f"kl_sample_train {rows[-1]['kl_sample_train']:.4f} > 0.01 at step {rows[-1]['step']}")
     w = rows[-WINDOW:]
     if len(w) < WINDOW:

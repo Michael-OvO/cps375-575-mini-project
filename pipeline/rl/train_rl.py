@@ -31,6 +31,9 @@ DEMO_TASKS = ("math", "code")
 KL_EVERY = 20  # spec §6.5: KL monitor every 20 steps, 64 rollouts scored under v4
 KL_ROLLOUTS = 64
 SMOKE_GROUPS = 8  # spec §7: smoke = 3 steps x 8 groups
+BACKOFF = (10, 30, 60)  # seconds before each retry of a crashed step or a failed save
+BUGS = (AssertionError, KeyError, TypeError, ValueError)  # re-raised at once: retrying cannot fix them
+OVER_BUDGET = 1.3  # soft stop: this run's spend > 1.3 x the schedule estimate of the steps it has done
 
 
 def build_datum(prompt: types.ModelInput, tokens: list[int], logprobs: list[float],
@@ -63,6 +66,11 @@ def demo_datum(sft: types.Datum, full_lp: list[float | None], weight: float) -> 
 
 def ratio_kl(sampler_lp: list[float], train_lp: list[float]) -> float:
     return sum(s - t for s, t in zip(sampler_lp, train_lp)) / max(1, len(sampler_lp))
+
+
+def abs_kl(sampler_lp: list[float], train_lp: list[float]) -> float:
+    """Mean |sampler - train| logprob gap: visibility only, since signed errors can cancel in ratio_kl."""
+    return sum(abs(s - t) for s, t in zip(sampler_lp, train_lp)) / max(1, len(sampler_lp))
 
 
 def step_metrics(groups: list[dict]) -> dict:
@@ -136,6 +144,7 @@ class Run:
             from pipeline.rl.teacher import TeacherTerm
             self.teacher = TeacherTerm(self.led)
         self.saved_step = None
+        self.phase = "3" if smoke else "4"
 
     def start(self, service: tinker.ServiceClient):
         from tinker_cookbook import model_info, renderers
@@ -199,10 +208,22 @@ class Run:
         await asyncio.gather(*(one(g) for g in groups))
 
     def save(self, tag: str) -> dict:
+        """Save state + sampler weights and the resume JSON; up to 3 retries with backoff, then exit 1. A retry
+        uses a fresh name, since a half-finished attempt may have taken the first (save_state never overwrites)."""
         ttl = self.cfg["ttl_seconds"]
-        name = f"{'rl1smoke' if self.smoke else 'rl1'}-{tag}"
-        state = self.client.save_state(name, ttl_seconds=ttl).result().path
-        sampler = self.client.save_weights_for_sampler(name, ttl_seconds=ttl).result().path
+        base = f"{'rl1smoke' if self.smoke else 'rl1'}-{tag}"
+        for attempt in range(len(BACKOFF) + 1):
+            name = base if attempt == 0 else f"{base}-r{attempt}"
+            try:
+                state = self.client.save_state(name, ttl_seconds=ttl).result().path
+                sampler = self.client.save_weights_for_sampler(name, ttl_seconds=ttl).result().path
+                break
+            except Exception as e:
+                if attempt == len(BACKOFF):
+                    raise SystemExit(f"save {base} failed {attempt + 1} times, last: {e!r}; the last good state is "
+                                     f"in {self.resume_path}")
+                print(f"save {name} failed ({e!r}); retrying in {BACKOFF[attempt]}s", file=sys.stderr)
+                time.sleep(BACKOFF[attempt])
         version, internal, gauss = random.getstate()
         st = {"step": self.step, "state_path": state, "sampler_path": sampler, "ema": self.scaler.state(),
               "rng": [version, list(internal), gauss], "ledger_total": self.led.total()}
@@ -224,7 +245,7 @@ class Run:
         n_demos = gs_cfg["max_per_step"] if gs_cfg["on"] else 0
         self.led.reserve(worst_case_usd([(i["task"], p.length) for i, p in zip(items, prompts)], self.cfg["caps"],
                                         self.cfg["G"], n_demos), f"rl1 step {self.step}")
-        phase, note = ("3" if self.smoke else "4"), f"step {self.step}"
+        phase, note = self.phase, f"step {self.step}"
         sampling_client = self.client.save_weights_and_get_sampling_client().result()
         groups = asyncio.run(self.sample(sampling_client, items, prompts))
         self.led.record(phase, "sample", sum(len(s.tokens) for g in groups for s in g["seqs"]), note=note)
@@ -292,16 +313,20 @@ class Run:
             out = fwd.result()
             opt.result()
             self.led.record(phase, "train", sum(dat.model_input.length for dat in datums), note=note)
-            kls = []
+            kls, kabs = [], []
             for slp, o in zip(sampler_lps, out.loss_fn_outputs):
                 tlp = o["logprobs"].to_torch().tolist()[-len(slp):]
                 kls.append(ratio_kl(slp, tlp))
-            if kls:  # a step can hold only gated-SFT datums when every RL group was constant
-                metrics["kl_sample_train"] = sum(kls) / len(kls)
+                kabs.append(abs_kl(slp, tlp))
+        else:
+            kls, kabs = [], []
+        # None: no RL datums this step (every group constant; at most gated-SFT datums); monitor skips the KL pause
+        metrics["kl_sample_train"] = sum(kls) / len(kls) if kls else None
+        metrics["kl_abs"] = sum(kabs) / len(kabs) if kabs else None
+        metrics["coef"] = {d: self.scaler.coef(d) for d in DOMAINS}  # the coefficients used this step
         for d in DOMAINS:
             self.scaler.update(d, stats[d], sum(lens_by[d]) / max(1, len(lens_by[d])))
         metrics["ledger_total"] = self.led.total()
-        metrics["coef"] = {d: self.scaler.coef(d) for d in DOMAINS}
         jsonl.append(self.log, metrics)
         jsonl.append(self.dir / "samples.jsonl", {"step": self.step, "samples": [
             {"id": g["item"]["id"], "task": g["task"], "reward": g["rewards"][0], "text": g["texts"][0][:4000]}
@@ -332,6 +357,21 @@ class Run:
         self.led.record("4", "prefill", sum(f for _, _, f in res), note=f"kl monitor step {self.step}")
         return sum(k for k, _, _ in res) / max(1, sum(n for _, n, _ in res))
 
+    def step_estimate(self, step: int) -> float:
+        """schedule.step_usd for this step's groups: the per-step estimate the schedule's budget was built on."""
+        from pipeline.rl.schedule import step_usd
+
+        counts: dict[str, int] = {}
+        for i in self.sched[step]:
+            counts[self.pools[i]["task"]] = counts.get(self.pools[i]["task"], 0) + 1
+        return step_usd(counts, self.cfg["baseline"], self.cfg["G"])
+
+    def spent_since(self, ts: float) -> float:
+        """This run's own spend since ts (its phase's local ledger rows), excluding checkpoint evals that run
+        alongside it and write the same ledger."""
+        return sum(r["usd"] for r in self.led.rows()
+                   if r["ts"] >= ts and r["phase"] == self.phase and r["kind"] != "billing_sync")
+
 
 async def _gather_async(fn, items):
     return await asyncio.gather(*(fn(i) for i in items))
@@ -356,6 +396,7 @@ def main() -> None:
         sys.exit(3)
     run.start(tinker.ServiceClient())
     end = len(run.sched) if a.until_step is None else min(a.until_step, len(run.sched))
+    start_ts, expected, first = time.time(), 0.0, run.step
     crashes = 0
     while run.step < end:
         if (run.dir / "PAUSED").exists():  # written by ckpt_eval's eval pause rules while training runs
@@ -369,14 +410,18 @@ def main() -> None:
             run.save_once("cap")
             print("CAP:", e)
             sys.exit(4)
+        except BUGS:
+            raise
         except Exception as e:  # a crashed step is retried from the same weights; 3 in a row stop the run
             crashes += 1
             print(f"step {run.step} crashed ({crashes}/3): {e!r}")
             if crashes >= 3:
                 raise
+            time.sleep(BACKOFF[crashes - 1])
             continue
         print(json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in m.items()
                           if not isinstance(v, dict)}))
+        expected += run.step_estimate(run.step)
         run.step += 1
         saved = None
         if run.step % run.cfg["save_every"] == 0 or run.step == end:
@@ -386,20 +431,27 @@ def main() -> None:
             except Exception as e:  # the local ledger still enforces the cap
                 print(f"billing sync failed: {e!r}", file=sys.stderr)
         # Pause rules every step (the sample-train KL pause applies at any step, spec §8); warnings are written
-        # at checkpoints only, so window warnings are not repeated every step.
-        rows = log_rows(run.log, run.step)
-        if "kl_sample_train" not in rows[-1]:
-            print(f"step {run.step - 1}: no RL datums, pause rules skipped this step", file=sys.stderr)
-            continue
-        pauses, warns = monitor.train_checks(rows, run.cfg["baseline"])
-        if saved is not None and not a.smoke:
-            if run.step % KL_EVERY == 0:
-                try:
-                    warns += monitor.kl_warning(run.kl_to_v4(saved["sampler_path"]))
-                except CapExceeded as e:  # state of this step is already saved
-                    print("CAP:", e)
-                    sys.exit(4)
-            monitor.warn(warns, run.step)
+        # at checkpoints only, so window warnings are not repeated every step. A monitor error pauses the run:
+        # it must never keep training unwatched, nor crash it unsaved.
+        try:
+            pauses, warns = monitor.train_checks(log_rows(run.log, run.step), run.cfg["baseline"])
+            if saved is not None and not a.smoke:
+                if run.step % KL_EVERY == 0:
+                    try:
+                        warns += monitor.kl_warning(run.kl_to_v4(saved["sampler_path"]))
+                    except CapExceeded as e:  # state of this step is already saved
+                        print("CAP:", e)
+                        sys.exit(4)
+                    except Exception as e:  # a monitor, not a gate: note it and keep training
+                        print(f"KL-to-v4 monitor failed: {e!r}", file=sys.stderr)
+                        warns.append(f"KL-to-v4 monitor failed at step {run.step}: {e!r}")
+                monitor.warn(warns, run.step)
+        except Exception as e:
+            pauses = [f"monitor error at step {run.step}: {e!r}"]
+        spent = run.spent_since(start_ts)
+        if spent > OVER_BUDGET * expected:
+            pauses.append(f"over budget estimate: ${spent:.2f} spent by this run over {run.step - first} "
+                          f"steps > {OVER_BUDGET} x ${expected:.2f} estimated")
         if pauses:
             pause(run, pauses)
 

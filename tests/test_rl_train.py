@@ -144,3 +144,212 @@ def test_log_rows_keeps_last_row_per_step_before_current(tmp_path):
     for r in ({"step": 0, "x": 1}, {"step": 1, "x": 1}, {"step": 2, "x": 1}, {"step": 1, "x": 2}):
         jsonl.append(p, r)
     assert TR.log_rows(p, 2) == [{"step": 0, "x": 1}, {"step": 1, "x": 2}]
+
+
+# ---- fake-client tests of the loop: no Tinker calls, no network ----
+
+from types import SimpleNamespace as _NS  # noqa: E402
+
+_RUN = TR.Run  # the real class: _main patches TR.Run
+
+
+class _Done:
+    def __init__(self, v):
+        self.v = v
+
+    def result(self):
+        return self.v
+
+
+class _Seq:
+    def __init__(self, n, stop="stop"):
+        self.tokens, self.logprobs, self.stop_reason = list(range(5, 5 + n)), [-0.5] * n, stop
+
+
+class _Sampling:
+    def __init__(self, lens):
+        self.lens = lens
+
+    async def sample_async(self, prompt, num_samples, sampling_params):
+        return _NS(sequences=[_Seq(self.lens[i % len(self.lens)], "length" if i == 0 else "stop")
+                              for i in range(num_samples)])
+
+    async def compute_logprobs_async(self, mi):
+        return [None] + [-0.5] * (mi.length - 1)
+
+
+class _Training:
+    def __init__(self, lens=(1, 2), save_failures=0):
+        self.lens, self.save_failures, self.names, self.calls = lens, save_failures, [], []
+
+    def save_weights_and_get_sampling_client(self):
+        return _Done(_Sampling(self.lens))
+
+    def forward_backward(self, datums, loss_fn):
+        assert loss_fn == "importance_sampling"
+        self.calls.append(len(datums))
+        return _Done(_NS(loss_fn_outputs=[{"logprobs": TensorData.from_torch(d.loss_fn_inputs["logprobs"].to_torch())}
+                                          for d in datums]))
+
+    def optim_step(self, p):
+        return _Done(None)
+
+    def save_state(self, name, ttl_seconds):
+        self.names.append(name)
+        if self.save_failures:
+            self.save_failures -= 1
+            raise RuntimeError("save down")
+        return _Done(_NS(path=f"tinker://s/{name}"))
+
+    def save_weights_for_sampler(self, name, ttl_seconds):
+        return _Done(_NS(path=f"tinker://w/{name}"))
+
+
+class _Renderer:
+    def build_generation_prompt(self, msgs):
+        return types.ModelInput.from_ints([1, 2, 3])
+
+    def get_stop_sequences(self):
+        return [0]
+
+    def parse_response(self, toks):
+        return {"content": "x" * len(toks)}, True
+
+
+async def _score(item, text, truncated, check_visible=False):
+    from pipeline.rl.rewards import Scored
+
+    if item["id"] == "bad":
+        raise RuntimeError("scorer down")
+    if item["task"] == "math":
+        return Scored(0.0, {"reason": "fail"})  # all-fail: gated SFT
+    return Scored(float(len(text) % 2), {"reason": "fail", "visible_pass": True} if item["task"] == "code"
+                  else {"reason": "scored"})
+
+
+def _fake_run(tmp_path, monkeypatch, cap=100.0, lens=(1, 2), steps=2, **kw):
+    from pipeline.rl import advantages as A
+    from pipeline.rl.ledger import Ledger
+
+    monkeypatch.setattr(TR.rewards, "score", _score)
+    monkeypatch.setattr(TR.demos, "pick", lambda item, idx: [{"role": "user", "content": "q"},
+                                                             {"role": "assistant", "content": "a"}])
+    import tinker_cookbook.supervised.data as D
+
+    monkeypatch.setattr(D, "conversation_to_datum", lambda m, r, max_length, train_on_what, reduction: types.Datum(
+        model_input=types.ModelInput.from_ints([1, 2, 3, 4]),
+        loss_fn_inputs={"target_tokens": TensorData.from_torch(torch.tensor([2, 3, 4, 5])),
+                        "weights": TensorData.from_torch(torch.tensor([0.0, 0.0, 1.0, 1.0]))}))
+    monkeypatch.setattr(TR.time, "sleep", lambda s: None)
+    items = ([{"id": "m0", "task": "math", "prompt": "p", "text": "t"}]
+             + [{"id": f"c{i}", "task": "code", "prompt": "p"} for i in range(2)]
+             + [{"id": f"i{i}", "task": "if", "prompt": "p"} for i in range(2)] + [{"id": "bad", "task": "if", "prompt": "p"}])
+    run = object.__new__(_RUN)
+    run.dir, run.smoke, run.phase = tmp_path, False, "4"
+    run.log, run.resume_path = tmp_path / "train_log.jsonl", tmp_path / "resume.json"
+    run.cfg = {"G": 8, "caps": {"math": 4096, "if": 1024, "code": 4096}, "lr": 2e-5, "ttl_seconds": 10,
+               "save_every": 10, "baseline": {d: {"L": 100, "mean_len": 2, "trunc": 0.5, "gate": 0.0, "vphf": 0.0}
+                                              for d in TR.DOMAINS},
+               "gated_sft": {"on": True, "mu": 0.5, "max_per_step": 8}, "teacher": {"on": False, "lam": 0.0}} | kw
+    run.pools = {i["id"]: i for i in items}
+    run.sched = [[i["id"] for i in items]] * steps
+    run.led = Ledger(tmp_path / "ledger.jsonl", cap_usd=cap)
+    run.teacher, run.saved_step, run.step, run.demos = None, None, 0, {}
+    run.renderer, run.client = _Renderer(), _Training(lens)
+    run.scaler = A.DomainScaler({"math": (0.3, 100), "if": (0.2, 50), "code": (0.4, 200)})
+    run.start = lambda service: None
+    return run
+
+
+def test_one_step_datums_demos_ledger_order_and_coef(tmp_path, monkeypatch):
+    run = _fake_run(tmp_path, monkeypatch)
+    coef_before = {d: run.scaler.coef(d) for d in TR.DOMAINS}
+    m = run.one_step()
+    assert m["score_errors"] == 1 and m["math/sft_groups"] == 1 and m["math/sft_tokens"] == 2
+    assert m["kl_sample_train"] == pytest.approx(0.0) and m["kl_abs"] == pytest.approx(0.0)
+    assert m["coef"] == coef_before and {d: run.scaler.coef(d) for d in TR.DOMAINS} != coef_before
+    assert m["datums"] == 4 * 8 + 1 and run.client.calls == [33]  # 2 code + 2 if groups, one demo, one call
+    rows = run.led.rows()
+    assert [(r["kind"], r["note"]) for r in rows] == [("sample", "step 0"), ("prefill", "step 0"),
+                                                      ("prefill", "step 0 demos"), ("train", "step 0")]
+    assert rows[1]["tokens"] == 6 * 3 and rows[2]["tokens"] == 5
+
+
+def test_no_rl_datums_logs_none_and_monitor_skips_kl(tmp_path, monkeypatch):
+    from pipeline.rl import monitor
+
+    run = _fake_run(tmp_path, monkeypatch, lens=(2,))  # every sample the same length: all groups constant
+    m = run.one_step()
+    assert m["kl_sample_train"] is None and m["kl_abs"] is None and m["datums"] == 3  # demos only: 1 math + 2 all-fail code
+    assert monitor.train_checks([m], run.cfg["baseline"]) == ([], [])
+
+
+def test_save_retries_with_fresh_names_then_exits(tmp_path, monkeypatch):
+    run = _fake_run(tmp_path, monkeypatch)
+    run.client.save_failures = 2
+    st = run.save("step0010")
+    assert run.client.names == ["rl1-step0010", "rl1-step0010-r1", "rl1-step0010-r2"]
+    assert st["state_path"] == "tinker://s/rl1-step0010-r2" and run.saved_step == 0
+    run.client.save_failures = 9
+    with pytest.raises(SystemExit, match="failed 4 times"):
+        run.save("step0020")
+
+
+def _main(monkeypatch, run, *argv):
+    monkeypatch.setattr(TR, "Run", lambda smoke: run)
+    monkeypatch.setattr(TR.data_gates, "require_passed", lambda: None)
+    monkeypatch.setattr(TR.tinker, "ServiceClient", lambda: None)
+    monkeypatch.setattr(TR, "sync_billing", lambda led: 0.0)
+    monkeypatch.setattr(TR.monitor, "warn", lambda msgs, step: None)
+    monkeypatch.setattr(TR.sys, "argv", ["train_rl", *argv])
+    with pytest.raises(SystemExit) as e:
+        TR.main()
+        raise SystemExit(0)
+    return e.value.code
+
+
+def test_main_done_paused_and_cap_exit_codes(tmp_path, monkeypatch):
+    (tmp_path / "a").mkdir()
+    run = _fake_run(tmp_path / "a", monkeypatch)
+    assert _main(monkeypatch, run) == 0 and run.step == 2
+    assert [r["step"] for r in TR.log_rows(run.log, 9)] == [0, 1] and run.saved_step == 2
+    (tmp_path / "b").mkdir()
+    run = _fake_run(tmp_path / "b", monkeypatch)
+    (run.dir / "PAUSED").write_text("eval pause\n")
+    assert _main(monkeypatch, run) == 3 and run.step == 0
+    (tmp_path / "c").mkdir()
+    run = _fake_run(tmp_path / "c", monkeypatch, cap=0.001)
+    assert _main(monkeypatch, run) == 4 and run.saved_step == 0 and not run.led.rows()
+
+
+def test_main_over_budget_and_monitor_error_pause(tmp_path, monkeypatch):
+    (tmp_path / "a").mkdir()
+    run = _fake_run(tmp_path / "a", monkeypatch)
+    monkeypatch.setattr(run, "step_estimate", lambda step: 0.0)
+    assert _main(monkeypatch, run) == 3 and run.step == 1 and run.saved_step == 1
+    assert "over budget estimate" in (run.dir / "PAUSED").read_text()
+    (tmp_path / "b").mkdir()
+    run = _fake_run(tmp_path / "b", monkeypatch)
+    monkeypatch.setattr(TR.monitor, "train_checks", lambda rows, base: 1 / 0)
+    assert _main(monkeypatch, run) == 3 and "monitor error" in (run.dir / "PAUSED").read_text()
+
+
+def test_main_kl_monitor_failure_keeps_training(tmp_path, monkeypatch):
+    run = _fake_run(tmp_path, monkeypatch, save_every=1)
+    monkeypatch.setattr(TR, "KL_EVERY", 1)
+    monkeypatch.setattr(run, "kl_to_v4", lambda path: (_ for _ in ()).throw(RuntimeError("v4 down")))
+    assert _main(monkeypatch, run) == 0 and run.step == 2
+
+
+def test_main_reraises_bugs_and_retries_transient(tmp_path, monkeypatch):
+    run = _fake_run(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(run, "one_step", lambda: calls.append(1) or {}["missing"])
+    with pytest.raises(KeyError):
+        _main(monkeypatch, run)
+    assert len(calls) == 1
+    calls.clear()
+    monkeypatch.setattr(run, "one_step", lambda: calls.append(1) or (_ for _ in ()).throw(RuntimeError("503")))
+    with pytest.raises(RuntimeError):
+        _main(monkeypatch, run)
+    assert len(calls) == 3
