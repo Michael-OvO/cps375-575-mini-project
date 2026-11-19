@@ -7,95 +7,59 @@ Unable to detect language for text 🌫️🏝️🎮 → 🧩: 🌅 + 🗿 = �
 
 PS: 👀🔍🗿🌑 due to No features in text.
 {
- "passed": false,
+ "passed": true,
  "checks": {
-  "code_guard": false,
+  "code_guard": true,
   "code_ref_fail": true,
-  "if_router": false,
-  "if_gates": false
+  "if_router": true,
+  "kwargs_determinism": true,
+  "if_gates": true
  },
  "n_code": 20236,
  "n_supported": 19525,
+ "n_eligible": 16382,
  "unsupported_rate": 0.03513540225340976,
- "guard_rate": 0.0023047375160051217,
- "ref_fail_rate": 0.00010243277848911651,
- "excluded_rate": 0.1919351650523819,
+ "guard_rate": 0.0017091930167256746,
+ "ref_fail_rate": 6.104260774020266e-05,
+ "excluded_rate": 0.19188574817157542,
  "reasons": {
-  "pass": 16352,
+  "pass": 16353,
   "harness_unsafe": 3429,
   "unsupported_tests": 422,
   "guard": 31,
-  "fail": 2
+  "fail": 1
  },
  "guard_violations": {
   "getattr:dynamic": 9,
-  "import:inspect": 7,
   "dunder:__mro__": 6,
-  "dunder:__class__": 4,
-  "dunder:__dict__": 3,
-  "call:sys.exit": 3,
-  "call:globals": 2,
+  "dunder:__class__": 3,
+  "dunder:__dict__": 2,
   "call:eval": 2,
   "call:locals": 2,
   "dunder:__monitored__": 1,
   "dunder:__tracker__": 1,
-  "import:pickle": 1,
   "call:exit": 1,
   "dunder:__instancecheck__": 1,
-  "import:subprocess": 1,
   "dunder:__bool__": 1,
-  "import:importlib.util": 1,
+  "import:inspect": 1,
   "call:exec": 1,
-  "attr:system": 1,
-  "attr:exc_info": 1,
-  "import:traceback": 1,
+  "call:globals": 1,
   "dunder:__bases__": 1
  },
- "excluded_types": [
-  "change_case:english_capital",
-  "length_constraints:nth_paragraph_first_word",
-  "new:copy_span_idx"
- ],
- "nondeterministic_types": [
-  "length_constraints:nth_paragraph_first_word",
-  "new:copy_span_idx"
- ],
- "excluded_prompt_share": 0.1257967563486417,
- "gate_failing_types": [
-  "change_case:capital_word_frequency",
-  "change_case:english_capital",
-  "count:count_increment_word",
-  "count:lowercase_counting",
-  "detectable_content:postscript",
-  "detectable_format:constrained_response",
-  "detectable_format:multiple_sections",
-  "detectable_format:number_bullet_lists",
-  "keywords:forbidden_words",
-  "keywords:start_end",
-  "length_constraints:nth_paragraph_first_word",
-  "length_constraints:number_sentences",
-  "length_constraints:number_words",
-  "letters:letter_counting",
-  "punctuation:punctuation_dot",
-  "startend:end_checker",
-  "startend:quotation",
-  "x:exact_paragraphs",
-  "x:first_word",
-  "x:keyword_exact",
-  "x:keyword_last_sentence",
-  "x:keyword_order",
-  "x:max_sentence_words",
-  "x:no_digits",
-  "x:no_markdown",
-  "x:numbered_list",
-  "x:paragraph_start",
-  "x:question_count",
-  "x:table_rows",
-  "x:xml_wrap"
- ],
- "gate_max_rate": 0.04703476482617587,
+ "excluded_types": [],
+ "excluded_prompt_share": 0.0,
+ "official_mismatch_over_1pct": {
+  "change_case:english_capital": 0.15384615384615385
+ },
+ "nondeterministic_types": {
+  "length_constraints:nth_paragraph_first_word": 772
+ },
+ "nondeterministic_prompt_share": 0.011601062825780785,
+ "gate_overall_rate": 0.008364501870112206,
+ "gate_failing_types": [],
+ "gate_max_rate": 0.023809523809523808,
  "gate_fired_by_rule": {
-  "repeated_sentence": 51,
+  "repeated_sentence": 31,
   "duplicate_items": 25,
   "placeholder": 72
  }
