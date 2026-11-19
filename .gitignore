@@ -40,3 +40,4 @@ evaluation/submission.json
 reports/data_preview.html
 runs/rl1/pools/*.jsonl
 runs/rl1/merge/
+runs/rl1/confirm/logs_*/

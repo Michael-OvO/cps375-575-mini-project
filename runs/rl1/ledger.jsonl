@@ -2802,3 +2802,9 @@
 {"ts": 1795069114.6510808, "phase": "eval", "kind": "sample", "tokens": 1060283, "usd": 0.8588292300000001, "note": "ckpt_eval step 170"}
 {"ts": 1795069114.700033, "phase": "eval", "kind": "prefill", "tokens": 641391, "usd": 0.19241729999999999, "note": "ckpt_eval step 170"}
 {"ts": 1795069119.214716, "phase": "4", "kind": "train", "tokens": 230042, "usd": 0.33586132, "note": "step 176"}
+{"ts": 1795069710.45034, "phase": "eval", "kind": "sample", "tokens": 959274, "usd": 0.7770119400000001, "note": "ckpt_eval step 130"}
+{"ts": 1795069710.5003252, "phase": "eval", "kind": "prefill", "tokens": 641391, "usd": 0.19241729999999999, "note": "ckpt_eval step 130"}
+{"ts": 1795069716.0790951, "phase": "eval", "kind": "sample", "tokens": 1000713, "usd": 0.81057753, "note": "ckpt_eval step 150"}
+{"ts": 1795069716.131453, "phase": "eval", "kind": "prefill", "tokens": 641391, "usd": 0.19241729999999999, "note": "ckpt_eval step 150"}
+{"ts": 1795070148.5206258, "phase": "-", "kind": "billing_sync", "tokens": 0, "usd": 7.50941952, "note": "Tinker billing, cumulative since rl1 start"}
+{"ts": 1795070159.0935738, "phase": "5", "kind": "estimate", "tokens": 0, "usd": 10.0, "note": "phase 5 confirmation (estimate; eval tools do not record): public x2 ~$4, vault x3 ~$3, proxies x2 ~$3"}

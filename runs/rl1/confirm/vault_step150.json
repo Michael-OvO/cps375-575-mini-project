@@ -1,0 +1,16 @@
+{
+  "math": 0.7467532467532467,
+  "code": 0.7730061349693251,
+  "ifeval_seen": 0.7938725490196079,
+  "ifeval_unseen": 0.656008476689105,
+  "counts": {
+    "math": 154,
+    "code": 163,
+    "ifeval_seen": 85,
+    "ifeval_unseen": 84,
+    "ifeval_unseen_new": 70
+  },
+  "ifeval_unseen_new": 0.4470982142857143,
+  "checkpoint_path": "tinker://66d7181a-14c8-563c-b4b3-3390b389bdd9:train:0/sampler_weights/rl1-step0150",
+  "split": "vault"
+}

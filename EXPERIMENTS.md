@@ -497,3 +497,26 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
   Tinker refused the upload: "Uploading external weights is not enabled for this organization." Per the plan,
   merging is dropped; no merge candidate was built or scored.
 - **Frozen** (`runs/rl1/selection.json`, committed before any confirmation): choice step 150, fallback step 160.
+
+## rl1 → Result (2026-11-19)
+Confirmation of the frozen choice (step 150) and fallback (step 160), greedy, paired per item against v4. Outputs in
+`runs/rl1/confirm/` (public via `eval_all --output_path`; `evaluation/submission.json` untouched).
+
+| | IFEval final_acc | MATH-500 | MBPP | vault math | vault code | vault IF (prompt) | MATH rest | HumanEval |
+|---|---|---|---|---|---|---|---|---|
+| v4 | 75.9 | 71.8 | 73.2 | 66.2 | 75.5 | 39.3 | 71.4 | 75.6 |
+| **rl1 step 150** | **81.6** | **74.6** | **74.7** | **74.7** | **77.3** | **51.0** | **74.7** | **81.1** |
+| rl1 step 160 (fallback) | 81.6 | 76.0 | 75.1 | 75.3 | 77.9 | 51.0 | 75.6 | 81.7 |
+
+- Paired deltas, step 150 vs v4 (± paired SE): public IFEval +5.7 ± 1.2, MATH-500 +2.8 ± 1.6, MBPP +1.6 ± 1.5;
+  vault math +8.4 ± 3.3, code +1.8 ± 3.0, IF +11.7 ± 2.8. Proxies (unpaired): MATH rest +3.3, HumanEval +5.5.
+  Vault IF by split: seen 79.4 / unseen 65.6 / unseen-new 44.7 (v4 64.6 / 55.5 / 42.9).
+- **Acceptance (spec §1): pass.** No area is below v4 at all, let alone by 2 SE; IF is above v4 by more than 3 SE on
+  both vault and public, and math by about 2 SE on both. Step 150 is the rl1 result.
+- Step 160 scores slightly higher on public math, but confirmation never switches between rl1 candidates and public
+  results never choose; the difference (+1.4 MATH-500) is within one paired SE of step 150.
+- Public sum 230.9 vs v4 220.9. Greedy MATH-500 at step 150 still has some 4,096-token cut-offs (dev: 9 vs v4r 13).
+- Spend: ledger $109.93 of the $135 cap (confirmation recorded as a $10 estimate; the eval tools do not record).
+  Tinker billing sync reported $7.51 since rl1 start, which lags and undercounts; the ledger is the binding figure.
+- TTL cleared on step 150 and step 160 state and sampler paths.
+- Note: `runs/rl1/config.json` still has `caps.math` 3584 from branch b; restore 4096 before any further training.
