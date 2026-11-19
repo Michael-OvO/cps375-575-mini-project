@@ -64,3 +64,54 @@ def test_build_schedule_no_repeats():
     sched = S.build(pools, {"strata": st}, {"if": 10, "math": 5, "code": 3}, steps=5, rng=random.Random(0))
     flat = [i for step in sched for i in step]
     assert len(sched) == 5 and len(flat) == len(set(flat)) == 90
+
+
+def test_domain_baseline_code_fields_and_fallback(capsys):
+    r = _row("c|x", [0, 0, 1, 0, 0, 0, 0, 0], task="code", lens=[10, 20, 30, 40, 10, 20, 30, 40])
+    r["vis"] = [True, False, None, True, None, None, None, None]
+    r["trunc"] = [True] + [False] * 7
+    r["reasons"] = ["fail", "guard", "pass", "gate", "fail", "fail", "fail", "fail"]
+    r2 = _row("c|y", [0] * 8, task="code")
+    b = C.domain_baseline([r, r2])["code"]
+    assert b["vphf"] == pytest.approx(2 / 16)
+    assert b["gate"] == pytest.approx(2 / 16)
+    assert b["trunc"] == pytest.approx(1 / 16)
+    assert b["mean_len"] == pytest.approx((200 + 800) / 16)
+    assert b["S_fallback"] is False
+    c = C.domain_baseline([r2])["code"]
+    assert c["S"] == 0.3 and c["S_fallback"] is True
+    assert "WARNING" in capsys.readouterr().err
+
+
+def test_calibrate_records_before_scoring_and_survives_score_error(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace as NS
+
+    seq = lambda: NS(tokens=[1, 2, 3], stop_reason="stop")
+
+    class Client:
+        async def sample_async(self, prompt, num_samples, sampling_params):
+            return NS(sequences=[seq() for _ in range(num_samples)])
+
+    class Rend:
+        def get_stop_sequences(self): return []
+        def build_generation_prompt(self, m): return NS(length=7)
+        def parse_response(self, t): return ({"content": "x"},)
+
+    class Led:
+        def __init__(self): self.calls = []
+        def record(self, *a, **k): self.calls.append(a[1])
+
+    async def fake_score(item, text, trunc, check_visible=False):
+        if item["id"] == "bad":
+            raise RuntimeError("boom")
+        return C.rewards.Scored(1.0, {"reason": "pass"})
+
+    monkeypatch.setattr(C.rewards, "score", fake_score)
+    led = Led()
+    items = [{"id": "ok", "task": "math", "stratum": "s", "prompt": "p"},
+             {"id": "bad", "task": "math", "stratum": "s", "prompt": "p"}]
+    rows = asyncio.run(C.calibrate(NS(renderer=Rend(), client=Client()), items, led))
+    assert [r["id"] for r in rows] == ["ok", "bad"]
+    assert rows[1]["reasons"] == ["score_error"] * C.G
+    assert led.calls.count("sample") == 2 and led.calls.count("prefill") == 2
