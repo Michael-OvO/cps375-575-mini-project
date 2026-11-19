@@ -45,7 +45,7 @@ def kwargs_deterministic(constraint: dict, prompt: str) -> bool:
     return len(set(args)) == 1
 
 
-def _key(c: dict) -> tuple[str, str]:
+def key(c: dict) -> tuple[str, str]:
     return c["id"], json.dumps(c.get("kwargs"), sort_keys=True, default=str)
 
 
@@ -56,7 +56,7 @@ def nondeterministic(rows: list[dict]) -> tuple[list[dict], list[str], int]:
     for r in rows:
         hit = False
         for c in r["constraints"]:
-            k = _key(c)
+            k = key(c)
             if k not in verdict:
                 verdict[k] = kwargs_deterministic(c, r["prompt"])
                 if not verdict[k]:
@@ -174,8 +174,8 @@ def determinism_gate(prompts: list[dict]) -> dict:
     answers = [r for name in IF_ANSWERS for r in jsonl.read(DATA / name)]
     dicts, prompt_ids, n_prompt = nondeterministic(prompts)
     more, answer_ids, n_answer = nondeterministic(answers)
-    seen = {_key(d) for d in dicts}
-    dicts += [d for d in more if _key(d) not in seen]
+    seen = {key(d) for d in dicts}
+    dicts += [d for d in more if key(d) not in seen]
     return {"n_checked": n_prompt + n_answer, "n_prompts": len(prompts), "nondeterministic_types": dict(Counter(d["id"] for d in dicts)),
             "nondeterministic_dicts": dicts, "nondeterministic_prompt_ids": prompt_ids,
             "nondeterministic_answer_ids": answer_ids,

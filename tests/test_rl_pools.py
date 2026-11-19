@@ -2,6 +2,7 @@ import random
 from collections import Counter
 
 from pipeline.rl import data_gates as G
+from pipeline.leakage import OverlapFilter
 from pipeline.rl import pools as P
 from pipeline.rl.rewards import Scored
 
@@ -147,7 +148,7 @@ def test_select_if_respects_type_cap_and_bins():
         cands.append({"id": f"c{i}", "constraints": [{"id": x} for x in ids]})
     out = P.select_if(cands, target=600, rng=random.Random(1))
     per_type = Counter(c["id"] for o in out for c in o["constraints"])
-    assert max(per_type.values()) <= 120
+    assert max(per_type.values()) <= P.TYPE_CAP
     bins = Counter(P.count_bin(len(o["constraints"])) for o in out)
     assert abs(bins["2-3"] / len(out) - 0.60) < 0.05
 
@@ -224,3 +225,86 @@ def test_build_if_drops_phase0_nondeterministic_ids_and_dicts(monkeypatch):
                              nondet_dicts=[{"id": "keywords:frequency", "kwargs": flagged}])
     assert [c["id"] for c in chosen] == ["p1"]
     assert rep["drops"]["nondeterministic_phase0"] == 2
+
+
+DEV_TEXT = ("Find the number of ordered pairs of positive integers whose product equals the least common multiple "
+            "of twelve and eighteen and whose sum is even")
+NEAR_DUP = DEV_TEXT.replace("positive", "natural")  # one word changed
+
+
+def test_code_drop_reason_dev_overlap_near_duplicate():
+    dev = OverlapFilter([DEV_TEXT])
+    assert not P.is_code_dev(NEAR_DUP)
+    assert P.code_drop_reason(_task(text=NEAR_DUP), set(), None, dev) == "dev_overlap"
+    assert P.code_drop_reason(_task(), set(), None, dev) is None
+
+
+def test_build_math_dev_overlap_near_duplicate(monkeypatch):
+    import pipeline.generate.math as gm
+    train = [{"id": "mt-1", "problem": NEAR_DUP, "target": "3", "level": 2, "subject": "Algebra", "dev": False},
+             {"id": "mt-2", "problem": "What is 2 + 2?", "target": "4", "level": 1, "subject": "Algebra", "dev": False}]
+    sols = [{"pid": "mn-1", "problem": NEAR_DUP, "target": "3", "level": "2", "subject": "Algebra"}] * 2 + \
+           [{"pid": "mn-2", "problem": "What is 3 + 3?", "target": "6", "level": "1", "subject": "Algebra"}] * 2
+    monkeypatch.setattr(gm, "load_train", lambda: train)
+    monkeypatch.setattr(P.jsonl, "read", lambda path: sols)
+    out, rep = P.build_math(None, OverlapFilter([DEV_TEXT]))
+    assert [r["id"] for r in out] == ["mt-2", "mn-2"]
+    assert rep["drops"] == {"dev_overlap": 1, "teacher_dev_overlap": 1}
+
+
+def _if_files(rows):
+    return {"if_rlvr_prompts.jsonl": rows, "if_base_tasks.jsonl": [], "if_dev.jsonl": [], "if_dev_new.jsonl": []}
+
+
+FULL = {"keyword": "tree", "frequency": 2, "relation": "at least"}
+
+
+def test_build_if_dev_overlap_near_duplicate(monkeypatch):
+    near = _prompt_row("p1", FULL) | {"task": NEAR_DUP, "prompt": NEAR_DUP + " Use tree twice."}
+    files = _if_files([near, _prompt_row("p2", FULL)])
+    monkeypatch.setattr(P.jsonl, "read", lambda path: files[path.name])
+    chosen, rep = P.build_if(None, set(), set(), random.Random(0), dev=OverlapFilter([DEV_TEXT]))
+    assert [c["id"] for c in chosen] == ["p2"] and rep["drops"]["dev_overlap"] == 1
+    assert rep["target"] == P.IF_TARGET and rep["chosen"] == 1
+
+
+def test_build_if_drops_trap_bases(monkeypatch):
+    trap = "Write a haiku about rain that never mentions water."
+    exact = _prompt_row("p1", FULL) | {"task": "  write a HAIKU about rain that never mentions water. "}
+    inside = _prompt_row("p2", FULL) | {"task": "x", "prompt": f"Note: {trap} Use tree twice."}
+    files = _if_files([exact, inside, _prompt_row("p3", FULL)])
+    monkeypatch.setattr(P.jsonl, "read", lambda path: files[path.name])
+    chosen, rep = P.build_if(None, set(), {trap}, random.Random(0))
+    assert [c["id"] for c in chosen] == ["p3"] and rep["drops"]["trap"] == 2
+
+
+def test_dev_filter_fails_closed_and_covers_if_dev_new(monkeypatch, tmp_path):
+    import pytest
+
+    from pipeline import jsonl, select
+    monkeypatch.setattr(select, "DATA", tmp_path)
+    monkeypatch.setattr(P, "DATA", tmp_path)
+    with pytest.raises(SystemExit):
+        P.dev_filter()
+    for name, row in (("math_dev.jsonl", {"problem": "What is the sum of the first ten odd primes?"}),
+                      ("code_dev.jsonl", {"text": "Write a function that reverses the words of a sentence."}),
+                      ("if_dev.jsonl", {"task": "Write a short essay about community gardens in cities."})):
+        jsonl.write(tmp_path / name, [row])
+    with pytest.raises(SystemExit):  # if_dev_new still missing
+        P.dev_filter()
+    jsonl.write(tmp_path / "if_dev_new.jsonl", [{"task": DEV_TEXT}])
+    assert P.dev_filter().is_leak(NEAR_DUP)
+
+
+def test_called_function_matches_whole_name():
+    code = "def g(x):\n    return 1\n\ndef big(x):\n    return 2\n"
+    assert P._called_function(code, ["assert big(1) == 2"]).name == "big"
+
+
+def test_select_if_type_cap_400_binds():
+    rng = random.Random(0)
+    cands = [{"id": f"c{i}", "constraints": [{"id": x} for x in rng.sample([f"fam{j}:t{j}" for j in range(6)], 2)]}
+             for i in range(5000)]
+    out = P.select_if(cands, target=5000, rng=random.Random(1))
+    per_type = Counter(c["id"] for o in out for c in o["constraints"])
+    assert P.TYPE_CAP == 400 and max(per_type.values()) == 400  # a prompt counts toward each of its types
