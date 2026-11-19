@@ -757,11 +757,10 @@
   ],
   "guard_rate": 0.0017091930167256746,
   "hard_fail_ids": [
-   "oci-586084257469",
    "oci-4c408a856586"
   ],
   "flaky_ids": [],
-  "ref_fail_rate": 0.00012208521548040532,
+  "ref_fail_rate": 6.104260774020266e-05,
   "harness_unsafe_ids": [
    "ct-5-0-0",
    "ct-7-0-1",
@@ -6162,7 +6161,6 @@
    "oci-e66be38c85e9",
    "oci-1a35111343c8",
    "oci-20df7ae937e6",
-   "oci-586084257469",
    "oci-85ba06d31737",
    "oci-d30a468eb4ca",
    "oci-a81cab507319",
@@ -7793,13 +7791,13 @@
    "oci-0c18c388d853",
    "oci-06be86666263"
   ],
-  "excluded_rate": 0.1919351650523819,
+  "excluded_rate": 0.19188574817157542,
   "reasons": {
-   "pass": 16352,
+   "pass": 16353,
    "harness_unsafe": 3429,
    "unsupported_tests": 422,
    "guard": 31,
-   "fail": 2
+   "fail": 1
   },
   "guard_violations": {
    "getattr:dynamic": 9,
@@ -14932,11 +14930,11 @@
  },
  "if_gates": {
   "n": 15117,
-  "n_good": 14705,
-  "overall_rate": 0.008364501870112206,
+  "n_good": 14608,
+  "overall_rate": 0.008420043811610076,
   "per_type": {
    "change_case:capital_word_frequency": {
-    "n": 954,
+    "n": 952,
     "fired": 9,
     "examples": [
      {
@@ -14970,10 +14968,10 @@
       ]
      }
     ],
-    "rate": 0.009433962264150943
+    "rate": 0.009453781512605041
    },
    "change_case:english_capital": {
-    "n": 755,
+    "n": 746,
     "fired": 8,
     "examples": [
      {
@@ -15007,10 +15005,10 @@
       ]
      }
     ],
-    "rate": 0.010596026490066225
+    "rate": 0.010723860589812333
    },
    "change_case:english_lowercase": {
-    "n": 762,
+    "n": 754,
     "fired": 4,
     "examples": [
      {
@@ -15038,10 +15036,10 @@
       ]
      }
     ],
-    "rate": 0.005249343832020997
+    "rate": 0.005305039787798408
    },
    "combination:repeat_prompt": {
-    "n": 397,
+    "n": 396,
     "fired": 2,
     "examples": [
      {
@@ -15057,10 +15055,10 @@
       ]
      }
     ],
-    "rate": 0.005037783375314861
+    "rate": 0.005050505050505051
    },
    "combination:two_responses": {
-    "n": 508,
+    "n": 503,
     "fired": 5,
     "examples": [
      {
@@ -15094,7 +15092,7 @@
       ]
      }
     ],
-    "rate": 0.00984251968503937
+    "rate": 0.009940357852882704
    },
    "copy:copy": {
     "n": 96,
@@ -15115,13 +15113,13 @@
     "rate": 0.0
    },
    "copy:repeat_phrase": {
-    "n": 251,
+    "n": 250,
     "fired": 0,
     "examples": [],
     "rate": 0.0
    },
    "count:count_increment_word": {
-    "n": 321,
+    "n": 311,
     "fired": 4,
     "examples": [
      {
@@ -15149,10 +15147,10 @@
       ]
      }
     ],
-    "rate": 0.012461059190031152
+    "rate": 0.012861736334405145
    },
    "count:count_unique": {
-    "n": 210,
+    "n": 206,
     "fired": 1,
     "examples": [
      {
@@ -15162,10 +15160,10 @@
       ]
      }
     ],
-    "rate": 0.004761904761904762
+    "rate": 0.0048543689320388345
    },
    "count:lowercase_counting": {
-    "n": 269,
+    "n": 264,
     "fired": 3,
     "examples": [
      {
@@ -15187,7 +15185,7 @@
       ]
      }
     ],
-    "rate": 0.011152416356877323
+    "rate": 0.011363636363636364
    },
    "detectable_content:number_placeholders": {
     "n": 929,
@@ -15215,7 +15213,7 @@
     "rate": 0.0032292787944025836
    },
    "detectable_content:postscript": {
-    "n": 914,
+    "n": 911,
     "fired": 9,
     "examples": [
      {
@@ -15249,16 +15247,16 @@
       ]
      }
     ],
-    "rate": 0.009846827133479213
+    "rate": 0.009879253567508232
    },
    "detectable_format:bigram_wrapping": {
-    "n": 125,
+    "n": 124,
     "fired": 0,
     "examples": [],
     "rate": 0.0
    },
    "detectable_format:constrained_response": {
-    "n": 489,
+    "n": 487,
     "fired": 6,
     "examples": [
      {
@@ -15292,7 +15290,7 @@
       ]
      }
     ],
-    "rate": 0.012269938650306749
+    "rate": 0.012320328542094456
    },
    "detectable_format:json_format": {
     "n": 485,
@@ -15326,7 +15324,7 @@
     "rate": 0.008247422680412371
    },
    "detectable_format:multiple_sections": {
-    "n": 757,
+    "n": 752,
     "fired": 5,
     "examples": [
      {
@@ -15360,7 +15358,7 @@
       ]
      }
     ],
-    "rate": 0.0066050198150594455
+    "rate": 0.006648936170212766
    },
    "detectable_format:number_bullet_lists": {
     "n": 904,
@@ -15400,7 +15398,7 @@
     "rate": 0.018805309734513276
    },
    "detectable_format:number_highlighted_sections": {
-    "n": 921,
+    "n": 916,
     "fired": 5,
     "examples": [
      {
@@ -15434,7 +15432,7 @@
       ]
      }
     ],
-    "rate": 0.0054288816503800215
+    "rate": 0.0054585152838427945
    },
    "detectable_format:sentence_hyphens": {
     "n": 25,
@@ -15456,7 +15454,7 @@
     "rate": 0.0
    },
    "detectable_format:title": {
-    "n": 916,
+    "n": 909,
     "fired": 4,
     "examples": [
      {
@@ -15484,10 +15482,10 @@
       ]
      }
     ],
-    "rate": 0.004366812227074236
+    "rate": 0.0044004400440044
    },
    "first_word:first_word_answer": {
-    "n": 269,
+    "n": 266,
     "fired": 2,
     "examples": [
      {
@@ -15503,10 +15501,10 @@
       ]
      }
     ],
-    "rate": 0.007434944237918215
+    "rate": 0.007518796992481203
    },
    "keywords:exclude_word_harder": {
-    "n": 293,
+    "n": 291,
     "fired": 2,
     "examples": [
      {
@@ -15522,10 +15520,10 @@
       ]
      }
     ],
-    "rate": 0.006825938566552901
+    "rate": 0.006872852233676976
    },
    "keywords:existence": {
-    "n": 919,
+    "n": 834,
     "fired": 3,
     "examples": [
      {
@@ -15547,10 +15545,10 @@
       ]
      }
     ],
-    "rate": 0.003264417845484222
+    "rate": 0.0035971223021582736
    },
    "keywords:forbidden_words": {
-    "n": 934,
+    "n": 928,
     "fired": 10,
     "examples": [
      {
@@ -15584,10 +15582,10 @@
       ]
      }
     ],
-    "rate": 0.010706638115631691
+    "rate": 0.010775862068965518
    },
    "keywords:frequency": {
-    "n": 918,
+    "n": 909,
     "fired": 3,
     "examples": [
      {
@@ -15609,10 +15607,10 @@
       ]
      }
     ],
-    "rate": 0.0032679738562091504
+    "rate": 0.0033003300330033004
    },
    "keywords:letter_frequency": {
-    "n": 987,
+    "n": 985,
     "fired": 8,
     "examples": [
      {
@@ -15646,10 +15644,10 @@
       ]
      }
     ],
-    "rate": 0.008105369807497468
+    "rate": 0.008121827411167513
    },
    "keywords:no_adjacent_consecutive": {
-    "n": 245,
+    "n": 238,
     "fired": 2,
     "examples": [
      {
@@ -15665,7 +15663,7 @@
       ]
      }
     ],
-    "rate": 0.00816326530612245
+    "rate": 0.008403361344537815
    },
    "keywords:palindrome": {
     "n": 181,
@@ -15674,7 +15672,7 @@
     "rate": 0.0
    },
    "keywords:start_end": {
-    "n": 263,
+    "n": 261,
     "fired": 5,
     "examples": [
      {
@@ -15708,16 +15706,16 @@
       ]
      }
     ],
-    "rate": 0.019011406844106463
+    "rate": 0.019157088122605363
    },
    "keywords:word_count_different_numbers": {
-    "n": 162,
+    "n": 161,
     "fired": 0,
     "examples": [],
     "rate": 0.0
    },
    "keywords:word_once": {
-    "n": 278,
+    "n": 272,
     "fired": 1,
     "examples": [
      {
@@ -15727,7 +15725,7 @@
       ]
      }
     ],
-    "rate": 0.0035971223021582736
+    "rate": 0.003676470588235294
    },
    "language:response_language": {
     "n": 695,
@@ -15768,7 +15766,7 @@
     "rate": 0.007194244604316547
    },
    "last_word:last_word_answer": {
-    "n": 300,
+    "n": 297,
     "fired": 1,
     "examples": [
      {
@@ -15778,7 +15776,7 @@
       ]
      }
     ],
-    "rate": 0.0033333333333333335
+    "rate": 0.003367003367003367
    },
    "last_word:last_word_sent": {
     "n": 218,
@@ -15825,7 +15823,7 @@
     "rate": 0.0066555740432612314
    },
    "length_constraints:number_paragraphs": {
-    "n": 795,
+    "n": 794,
     "fired": 1,
     "examples": [
      {
@@ -15835,10 +15833,10 @@
       ]
      }
     ],
-    "rate": 0.0012578616352201257
+    "rate": 0.0012594458438287153
    },
    "length_constraints:number_sentences": {
-    "n": 883,
+    "n": 879,
     "fired": 10,
     "examples": [
      {
@@ -15872,10 +15870,10 @@
       ]
      }
     ],
-    "rate": 0.011325028312570781
+    "rate": 0.011376564277588168
    },
    "length_constraints:number_words": {
-    "n": 795,
+    "n": 794,
     "fired": 6,
     "examples": [
      {
@@ -15909,7 +15907,7 @@
       ]
      }
     ],
-    "rate": 0.007547169811320755
+    "rate": 0.007556675062972292
    },
    "letters:letter_counting": {
     "n": 163,
@@ -15931,7 +15929,7 @@
     "rate": 0.012269938650306749
    },
    "letters:letter_counting2": {
-    "n": 306,
+    "n": 303,
     "fired": 2,
     "examples": [
      {
@@ -15947,7 +15945,7 @@
       ]
      }
     ],
-    "rate": 0.006535947712418301
+    "rate": 0.006600660066006601
    },
    "new:copy_span_idx": {
     "n": 81,
@@ -15975,7 +15973,7 @@
     "rate": 0.003401360544217687
    },
    "punctuation:no_comma": {
-    "n": 920,
+    "n": 915,
     "fired": 8,
     "examples": [
      {
@@ -16009,10 +16007,10 @@
       ]
      }
     ],
-    "rate": 0.008695652173913044
+    "rate": 0.008743169398907104
    },
    "punctuation:punctuation_dot": {
-    "n": 278,
+    "n": 276,
     "fired": 4,
     "examples": [
      {
@@ -16041,10 +16039,10 @@
       ]
      }
     ],
-    "rate": 0.014388489208633094
+    "rate": 0.014492753623188406
    },
    "punctuation:punctuation_exclamation": {
-    "n": 317,
+    "n": 315,
     "fired": 1,
     "examples": [
      {
@@ -16054,10 +16052,10 @@
       ]
      }
     ],
-    "rate": 0.0031545741324921135
+    "rate": 0.0031746031746031746
    },
    "startend:end_checker": {
-    "n": 490,
+    "n": 486,
     "fired": 5,
     "examples": [
      {
@@ -16091,10 +16089,10 @@
       ]
      }
     ],
-    "rate": 0.01020408163265306
+    "rate": 0.0102880658436214
    },
    "startend:quotation": {
-    "n": 824,
+    "n": 818,
     "fired": 14,
     "examples": [
      {
@@ -16128,7 +16126,7 @@
       ]
      }
     ],
-    "rate": 0.01699029126213592
+    "rate": 0.017114914425427872
    },
    "x:ban_char": {
     "n": 301,

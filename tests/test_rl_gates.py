@@ -10,6 +10,7 @@ def test_clean_answer_passes():
 
 def test_label_line_fires():
     assert "label_line" in gate_reasons("Keyword: tree\nThe tree is tall and green today.", KW)
+    assert "label_line" in gate_reasons("The tree is tall and green today.\nKeywords: tree, tree, tree", KW)
 
 
 def test_placeholder_fires_unless_exempt():

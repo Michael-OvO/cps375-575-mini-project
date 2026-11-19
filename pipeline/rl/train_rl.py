@@ -438,7 +438,10 @@ def main() -> None:
             if saved is not None and not a.smoke:
                 if run.step % KL_EVERY == 0:
                     try:
-                        warns += monitor.kl_warning(run.kl_to_v4(saved["sampler_path"]))
+                        kl_v4 = run.kl_to_v4(saved["sampler_path"])
+                        with open(run.dir / "kl_v4.jsonl", "a") as f:
+                            f.write(json.dumps({"step": run.step, "kl_v4": kl_v4}) + "\n")
+                        warns += monitor.kl_warning(kl_v4)
                     except CapExceeded as e:  # state of this step is already saved
                         print("CAP:", e)
                         sys.exit(4)

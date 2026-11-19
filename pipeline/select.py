@@ -124,7 +124,7 @@ def harness_safe_pool(rows: list[dict], rng: random.Random) -> list[dict]:
 # v4 IF quality filter (audit 2026-11-15 of the IF-RLVR answers): checker-gaming label lines such as
 # "Palindrome: level.", degenerate repetition from absurd constraint mixes, throwaway answers under 4 words,
 # and more than IF_MAX_SAME copies of one answer ("My answer is yes.").
-_LABEL_LINE = re.compile(r"(?im)^\W*(palindr\w*|pal[ií]ndromo|keyword)\s*:\s*\S")
+_LABEL_LINE = re.compile(r"(?im)^\W*(palindr\w*|pal[ií]ndromo|keywords?)\s*:\s*\S")
 IF_MIN_WORDS, IF_MAX_SAME, IF_MAX_WORD_SHARE = 4, 5, 0.25
 
 

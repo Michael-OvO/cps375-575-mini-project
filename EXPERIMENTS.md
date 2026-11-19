@@ -398,3 +398,11 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 - Step 40 vs v4 (paired, dev): math +2.2 ± 1.8, code +3.0 ± 1.5, IF +4.3 ± 1.6 points.
 - Spend: ledger $29.28 (pilot ≈ $19.5, ~$0.49/step vs the $0.77 estimate). Tinker billing sync still reports $0 for
   today (API lag); the ledger is the working total.
+
+### rl1 → Pre-4b changes (2026-11-18)
+- IF quality gate: the label-line rule now also catches plural "Keywords:" lines (a keyword-stuffing path found
+  in the hand review). Phase 0 rerun still passes; gate firing on good teacher answers 0.836% → 0.842%, and the new
+  pattern fires on none of them. Applies from step 41, so steps 1–40 used the old gate.
+- Left as is (reviewed): the <4-word `too_short` gate (rare; brevity constraints are exempt), the trivially-true
+  palindrome checker (vendored IFEvalG behaviour) and langdetect on short text (IFEval's own grader uses it).
+- KL-to-v4 is now written to `runs/rl1/kl_v4.jsonl` every 20 steps (it was only checked against the 0.05 warning).
