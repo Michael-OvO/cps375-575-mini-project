@@ -427,3 +427,19 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 - Dev greedy, math / code / IF seen / unseen / unseen_new: step 140 76.3 / 76.6 / 80.9 / 63.7 / 55.3;
   step 160 78.2 / 76.9 / 79.7 / 63.3 / 58.9. pass@1 160: math 0.76, code 0.70, IF 0.51. Trap hack 0.02. KL to v4 0.0144.
 - Spend $84.06 at the pause. Renamed `PAUSED` to `PAUSED.step160` after review.
+
+### rl1 → Graded math truncation from step 161 (2026-11-19)
+- Why: the step-160 pause was sampled math truncation. Greedy dev showed long answers now pay off (3,072–4,000 tokens:
+  3/5 correct at step 160 vs none that long at v4), while cut-off answers always score 0 and about half are
+  repetition loops (3/6 at step 160, 8/13 at v4). Under group centering, a cut-off in an all-fail group got no
+  signal at all. A linear/DAPO near-cap ramp was rejected: it would dock correct answers the grader accepts.
+- Reward (math only; `graded_trunc` in config): correct finished 1; wrong finished 0 (no length penalty); cut off
+  ending in a correct final ANSWER line 0.75 (the grader reads an ANSWER line only at the end of the text, `\Z`);
+  other cut-offs -0.25; repetition loops (a 12-word chunk repeated >= 4 times, cut-off text only) get an extra
+  -0.25 on the loop tokens only, not group-centered, so loops are pushed down even in all-fail groups.
+  λ = 0.25 keeps long attempts worth trying: at step 160 long attempts had p(correct) ≈ p(cut off), and p - λq > 0
+  with a 4x margin. Order correct > wrong > cut off holds in every case.
+- Gated SFT now keys on the grader's verdict (no sample correct), not on rewards == 0. `math/acc` (unshaped) and
+  `math/loops` are logged; the truncation pause line is unchanged.
+- Checks: loop detector flagged 0/599 finished calibration answers; rescoring 239 finished calibration samples
+  changed none; the 6 cut-off greedy answers at step 160 split 3 loops / 3 not.

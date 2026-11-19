@@ -218,6 +218,42 @@ def test_math_reward_uses_graded_scorer():
     assert asyncio.run(R.math_reward("ANSWER: \\frac{1}{2}", "0.5", False)).reward == 1.0
 
 
+LOOP = "First we expand the product and collect the terms of the same degree on the left side now. " * 6
+
+
+def _mr(text, target, truncated, graded=True):
+    return asyncio.run(R.math_reward(text, target, truncated, graded_trunc=graded))
+
+
+def test_graded_truncation_cases():
+    long_ok = "Let me reason carefully about this. " * 400 + "\n\nANSWER: 4"
+    assert _mr(long_ok, "4", False).reward == 1.0  # correct is never penalized for length
+    assert _mr("step " * 3000 + "\n\nANSWER: 5", "4", False).reward == 0.0  # wrong, finished: no length penalty
+    s = _mr("work\n\nANSWER: 4", "4", True)  # cut off right at the final answer line: the grader credits it
+    assert (s.reward, s.info["reason"], s.info["correct"]) == (R.TRUNC_ANSWERED, "truncated_answered", True)
+    s = _mr("work\n\nANSWER: 4\n\nLet me double check by", "4", True)  # the grader only reads a final ANSWER line
+    assert (s.reward, s.info["correct"]) == (R.TRUNC_PENALTY, False)
+    s = _mr("work\n\nANSWER: 5\n\nhmm", "4", True)
+    assert (s.reward, s.info["correct"]) == (R.TRUNC_PENALTY, False)
+    s = _mr("Consider the cases one at a time and keep going " + "with new ideas number %d. " % 1, "4", True)
+    assert (s.reward, s.info["reason"], s.info["loop_onset"]) == (R.TRUNC_PENALTY, "truncated", None)
+    s = _mr("Setup of the problem goes here with distinct words. " * 1 + LOOP, "4", True)
+    assert s.info["reason"] == "truncated_loop" and 0 < s.info["loop_onset"] < 0.2
+
+
+def test_graded_truncation_off_keeps_old_rewards():
+    s = _mr("work\n\nANSWER: 4", "4", True, graded=False)
+    assert (s.reward, s.info["correct"]) == (0.0, True)
+
+
+def test_loop_onset_needs_four_repeats_and_ignores_short_text():
+    assert R.loop_onset("a b c") is None
+    three = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu " * 3 + " ".join(
+        f"w{i}" for i in range(40))
+    assert R.loop_onset(three) is None
+    assert R.loop_onset("intro words here " + LOOP) is not None
+
+
 def test_if_reward_formula_and_max():
     assert R.if_max(1) == pytest.approx(0.5 + 2 / (4 * 1.54))
     assert R.if_max(5) == pytest.approx(2.1234, abs=1e-3)

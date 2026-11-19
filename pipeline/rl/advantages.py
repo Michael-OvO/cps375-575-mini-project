@@ -43,6 +43,13 @@ class DomainScaler:
         return out
 
 
+def loop_tail(tok_adv: list[float], start: int, penalty: float) -> list[float]:
+    """Subtract `penalty` from the advantages of tokens start.. (a repetition loop), leaving the reasoning before it
+    alone. Not group-centered on purpose: a loop is never useful, so it is pushed down even in all-fail groups."""
+    start = max(0, min(start, len(tok_adv)))
+    return tok_adv[:start] + [a - penalty for a in tok_adv[start:]]
+
+
 def token_advantages(adv: float, n_tokens: int, teacher_logratio: list[float] | None = None, lam: float = 0.0,
                      mask: list[float] | None = None) -> list[float]:
     """Per completion token: the (already scaled) task advantage, minus lam*(log p_student - log q_teacher)

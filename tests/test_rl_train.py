@@ -216,7 +216,7 @@ class _Renderer:
         return {"content": "x" * len(toks)}, True
 
 
-async def _score(item, text, truncated, check_visible=False):
+async def _score(item, text, truncated, check_visible=False, graded_trunc=False):
     from pipeline.rl.rewards import Scored
 
     if item["id"] == "bad":
@@ -255,6 +255,7 @@ def _fake_run(tmp_path, monkeypatch, cap=100.0, lens=(1, 2), steps=2, **kw):
     run.sched = [[i["id"] for i in items]] * steps
     run.led = Ledger(tmp_path / "ledger.jsonl", cap_usd=cap)
     run.teacher, run.saved_step, run.step, run.demos = None, None, 0, {}
+    run.graded_trunc = bool(run.cfg.get("graded_trunc", {}).get("on", False))
     run.renderer, run.client = _Renderer(), _Training(lens)
     run.scaler = A.DomainScaler({"math": (0.3, 100), "if": (0.2, 50), "code": (0.4, 200)})
     run.start = lambda service: None
@@ -282,6 +283,50 @@ def test_no_rl_datums_logs_none_and_monitor_skips_kl(tmp_path, monkeypatch):
     m = run.one_step()
     assert m["kl_sample_train"] is None and m["kl_abs"] is None and m["datums"] == 3  # demos only: 1 math + 2 all-fail code
     assert monitor.train_checks([m], run.cfg["baseline"]) == ([], [])
+
+
+def test_constant_math_group_of_loops_trains_only_loop_tokens_and_keeps_demo(tmp_path, monkeypatch):
+    from pipeline.rl.rewards import LOOP_TOKEN_PENALTY, TRUNC_PENALTY, Scored
+
+    seen = []
+
+    async def score(item, text, truncated, check_visible=False, graded_trunc=False):
+        seen.append(graded_trunc)
+        if item["task"] == "math":  # every sample cut off in a loop halfway: a constant group of -0.25
+            return Scored(TRUNC_PENALTY, {"reason": "truncated_loop", "correct": False, "loop_onset": 0.5})
+        return Scored(0.0, {"reason": "fail"})
+
+    run = _fake_run(tmp_path, monkeypatch, lens=(4,), graded_trunc={"on": True})
+    monkeypatch.setattr(TR.rewards, "score", score)
+    c = run.scaler.coef("math")
+    got = []
+    fb = run.client.forward_backward
+    run.client.forward_backward = lambda datums, loss_fn: (got.extend(datums), fb(datums, loss_fn))[1]
+    m = run.one_step()
+    assert all(seen) and m["math/loops"] == 8 and m["math/acc"] == 0.0
+    adv = got[0].loss_fn_inputs["advantages"].to_torch().tolist()[-4:]  # 4 completion tokens, loop from token 2
+    assert adv == pytest.approx([0.0, 0.0, -c * LOOP_TOKEN_PENALTY, -c * LOOP_TOKEN_PENALTY])
+    # the 8 loop samples (constant group: zero outcome advantage) plus the math demo; code/if are constant 0
+    assert m["datums"] == 8 + 1 + 2 and m["math/sft_groups"] == 1
+    assert m["kl_sample_train"] == pytest.approx(0.0)
+
+
+def test_loop_tail_and_all_fail():
+    from pipeline.rl import advantages as A
+
+    assert A.loop_tail([0.1, 0.1, 0.1, 0.1], 2, 0.25) == pytest.approx([0.1, 0.1, -0.15, -0.15])
+    assert A.loop_tail([0.0, 0.0], 5, 1.0) == [0.0, 0.0]
+    assert TR.all_fail({"task": "math", "rewards": [-0.25, 0.0], "correct": [False, False]})
+    assert not TR.all_fail({"task": "math", "rewards": [0.75, -0.25], "correct": [True, False]})
+    assert TR.all_fail({"task": "code", "rewards": [0.0, 0.0]})
+
+
+def test_step_metrics_math_accuracy_is_unshaped():
+    g = {"task": "math", "rewards": [1.0, -0.25, 0.75, 0.0], "lens": [10] * 4, "trunc": [False, True, True, False],
+         "reasons": ["pass", "truncated_loop", "truncated_answered", "fail"], "vis": [None] * 4, "kept": True,
+         "adv_tokens": 1.0, "correct": [True, False, True, False], "loop": [None, 0.3, None, None]}
+    m = TR.step_metrics([g])
+    assert m["math/acc"] == 0.5 and m["math/loops"] == 1 and m["math/reward"] == pytest.approx(0.375)
 
 
 def test_save_retries_with_fresh_names_then_exits(tmp_path, monkeypatch):

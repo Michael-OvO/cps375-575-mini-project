@@ -104,5 +104,14 @@
    "vphf": 0.02666666666666667
   }
  },
- "baseline_note": "pause baselines (mean_len/trunc/gate/vphf) reweighted from calibration strata to the main schedule's stratum mix after the step-20 false pause (calibration code sample was 95% ct, schedule is 71% oci); S/L EMA init unchanged"
+ "baseline_note": "pause baselines (mean_len/trunc/gate/vphf) reweighted from calibration strata to the main schedule's stratum mix after the step-20 false pause (calibration code sample was 95% ct, schedule is 71% oci); S/L EMA init unchanged",
+ "graded_trunc": {
+  "on": true,
+  "from_step": 160,
+  "trunc_answered": 0.75,
+  "trunc_penalty": -0.25,
+  "loop_token_penalty": 0.25,
+  "loop_ngram": 12,
+  "loop_repeats": 4
+ }
 }

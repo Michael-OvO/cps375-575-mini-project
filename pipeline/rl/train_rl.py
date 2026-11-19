@@ -93,7 +93,18 @@ def step_metrics(groups: list[dict]) -> dict:
         m[f"{d}/sft_tokens"] = sum(g.get("sft_tokens", 0) for g in gs)
         if d == "code":
             m["code/vphf"] = sum(v is True for g in gs for v in g["vis"]) / n
+        if d == "math" and all(c is not None for g in gs for c in g.get("correct", [None])):
+            m["math/acc"] = sum(sum(g["correct"]) for g in gs) / n  # grader accuracy, unshaped
+            m["math/loops"] = sum(o is not None for g in gs for o in g.get("loop", []))
     return m
+
+
+def all_fail(g: dict) -> bool:
+    """No sample solved the task. Math uses the grader's verdict, since graded truncation makes rewards negative
+    or fractional; code and IF use the reward."""
+    if g["task"] == "math" and all(c is not None for c in g.get("correct", [None])):
+        return not any(g["correct"])
+    return max(g["rewards"]) == 0
 
 
 def worst_case_usd(groups: list[tuple[str, int]], caps: dict[str, int], G: int, demos: int) -> float:
@@ -139,6 +150,7 @@ class Run:
         self.log = self.dir / "train_log.jsonl"
         self.resume_path = self.dir / "resume.json"
         self.demos = demos.load() if self.cfg["gated_sft"]["on"] else {}
+        self.graded_trunc = bool(self.cfg.get("graded_trunc", {}).get("on", False))
         self.teacher = None
         if self.cfg["teacher"]["on"] and not smoke:
             from pipeline.rl.teacher import TeacherTerm
@@ -195,7 +207,8 @@ class Run:
             g["trunc"] = [s.stop_reason == TRUNC for s in seqs]
             g["lens"] = [len(s.tokens) for s in seqs]
             try:
-                scored = await asyncio.gather(*(rewards.score(g["item"], t, tr, check_visible=g["task"] == "code")
+                scored = await asyncio.gather(*(rewards.score(g["item"], t, tr, check_visible=g["task"] == "code",
+                                                              graded_trunc=self.graded_trunc)
                                                 for t, tr in zip(g["texts"], g["trunc"])))
             except Exception as e:  # the samples are paid for: drop this group, not the step
                 print(f"score error {g['item']['id']}: {e!r}", file=sys.stderr)
@@ -204,6 +217,8 @@ class Run:
             g["rewards"] = [s.reward for s in scored]
             g["reasons"] = [s.info.get("reason") for s in scored]
             g["vis"] = [s.info.get("visible_pass") for s in scored]
+            g["correct"] = [s.info.get("correct") for s in scored]  # math only: the grader's verdict
+            g["loop"] = [s.info.get("loop_onset") for s in scored]  # math with graded_trunc: loop start (word share)
 
         await asyncio.gather(*(one(g) for g in groups))
 
@@ -266,27 +281,35 @@ class Run:
             constant = A.is_constant(g["rewards"])
             keep_for_teacher = self.teacher is not None and d == "if"
             g["kept"] = not constant
-            if (gs_cfg["on"] and d in DEMO_TASKS and max(g["rewards"]) == 0
+            if (gs_cfg["on"] and d in DEMO_TASKS and all_fail(g)
                     and len(demo_slots) < gs_cfg["max_per_step"]):
                 msgs = demos.pick(g["item"], self.demos)
                 if msgs is not None:
                     demo_slots.append((g, msgs, gs_cfg["mu"] * self.scaler.coef(d)))
-            if constant and not keep_for_teacher:
+            # loop starts as token indices (word share x tokens: approximate by a few tokens, which is harmless)
+            loops = {si: int(o * len(seq.tokens)) for si, (seq, o) in enumerate(zip(g["seqs"], g["loop"]))
+                     if o is not None and seq.tokens}
+            skip = constant and not keep_for_teacher
+            if skip and not loops:
                 continue
             adv = A.centered(g["rewards"])
             if not constant:
                 stats[d] += adv
             c = self.scaler.coef(d)
             for si, (seq, a) in enumerate(zip(g["seqs"], adv)):
-                if not seq.tokens:
-                    continue
+                if not seq.tokens or (skip and si not in loops):
+                    continue  # in a constant group only loop samples carry signal (their loop-token penalty)
                 tr = teacher_ratios.get((gi, si))
                 tok_adv = A.token_advantages(c * a, len(seq.tokens),
                                              teacher_logratio=tr["ratio"] if tr else None,
                                              lam=self.cfg["teacher"]["lam"], mask=tr["mask"] if tr else None)
+                g["adv_tokens"] += abs(c * a) * len(seq.tokens)
+                if si in loops:
+                    pen = c * rewards.LOOP_TOKEN_PENALTY
+                    tok_adv = A.loop_tail(tok_adv, loops[si], pen)
+                    g["adv_tokens"] += pen * (len(seq.tokens) - loops[si])
                 datums.append(build_datum(g["prompt"], list(seq.tokens), list(seq.logprobs), tok_adv))
                 sampler_lps.append(list(seq.logprobs))
-                g["adv_tokens"] += abs(c * a) * len(seq.tokens)
         if demo_slots:  # appended after the RL datums, so the KL zip below covers RL datums only
             from tinker_cookbook.renderers import TrainOnWhat
             from tinker_cookbook.supervised.data import conversation_to_datum
