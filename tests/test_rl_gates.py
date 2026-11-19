@@ -100,3 +100,10 @@ def test_copy_types_exempt_from_duplicate_items_and_too_short():
         assert "duplicate_items" not in gate_reasons(dup, c)
         assert "too_short" not in gate_reasons("Yes, tree.", c)
     assert "duplicate_items" in gate_reasons(dup, KW)
+
+
+def test_constrained_response_exempt_from_repeated_sentence():
+    text = "My answer is yes. " * 3 + "The tree program works well here."
+    assert "repeated_sentence" in gate_reasons(text, KW)
+    cr = [{"id": "detectable_format:constrained_response", "kwargs": {}}]
+    assert "repeated_sentence" not in gate_reasons(text, cr)

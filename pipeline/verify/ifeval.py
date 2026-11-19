@@ -30,8 +30,8 @@ def _instance(constraint: dict, prompt: str):
         inst = instructions_registry.INSTRUCTION_DICT[cid](cid)
         inst.build_description(**{k: v for k, v in kwargs.items() if v is not None})
     else:
-        inst = ifevalg.REGISTRY[cid](cid)  # upstream IF-RLVR builds with falsy kwargs dropped
-        inst.build_description(**{k: v for k, v in kwargs.items() if v})
+        inst = ifevalg.REGISTRY[cid](cid)  # drop only None: 0 and False are real values (e.g. n_start=0)
+        inst.build_description(**{k: v for k, v in kwargs.items() if v is not None})
     args = inst.get_instruction_args()
     if args and "prompt" in args:
         inst.build_description(prompt=prompt)

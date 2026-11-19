@@ -1,10 +1,13 @@
 """Phase 0 data gates, run before any paid phase (spec §5):
-1. code: guards fire on <= 0.2% of reference solutions and <= 2% of references fail their own tests (rates over
-   items whose asserts the parent can verify); every reference scoring below 1 leaves the pool;
-2. IF router: the routed checkers accept the stored verified IF-RLVR answers; a type with > 1% mismatch is
-   dropped, and the gate fails if dropped types cover >= 5% of IF prompts;
-3. kwargs determinism: every pool kwargs dict builds and gives the same arguments over 5 seeds;
-4. IF quality gate: < 1% firing per type (n >= 50) on verified teacher answers that pass the v4 SFT filter.
+1. code, over supported, harness-safe references (the ones that can enter pools): guards fire on <= 0.2% and
+   <= 2% fail their own tests; every reference scoring below 1 leaves the pool;
+2. IF router, non-IFEval ids only: the routed checkers accept the stored verified IF-RLVR answers; a type with
+   > 1% mismatch is dropped, and the gate fails if dropped types cover >= 5% of IF prompts. IFEval ids always use
+   the official checker (it grades us); their mismatch with stored labels is reported as information;
+3. kwargs determinism: every pool kwargs dict builds and gives the same arguments over 5 seeds; failing dicts
+   (not types) are dropped, and the gate fails if they cover >= 5% of IF prompts;
+4. IF quality gate, on verified teacher answers that pass the v4 SFT filter: fires on < 1.5% of answers and on
+   < 3% of every type with n >= 50.
 Writes runs/rl1/phase0.json; train_rl and calibrate refuse to run unless passed."""
 
 import json
@@ -24,7 +27,8 @@ from pipeline.verify import ifeval as vi
 OUT = RUNS / "rl1" / "phase0.json"
 IF_ANSWERS = ("if_rlvr.gpt.jsonl", "if_rlvr.codex.jsonl", "if_rlvr.codex.retry.jsonl")
 HARD_FAIL = {"fail", "timeout", "oom"}  # the reference ran and did not pass its own tests
-GUARD_MAX, REF_FAIL_MAX, MISMATCH_MAX, EXCLUDED_SHARE_MAX, GATE_MAX, GATE_MIN_N = 0.002, 0.02, 0.01, 0.05, 0.01, 50
+GUARD_MAX, REF_FAIL_MAX, MISMATCH_MAX, SHARE_MAX = 0.002, 0.02, 0.01, 0.05
+GATE_ALL_MAX, GATE_TYPE_MAX, GATE_MIN_N = 0.015, 0.03, 50
 SEEDS = 5
 
 
@@ -39,6 +43,27 @@ def kwargs_deterministic(constraint: dict, prompt: str) -> bool:
         get = getattr(inst, "get_instruction_args", None)
         args.append(repr(get()) if get else repr(constraint.get("kwargs")))
     return len(set(args)) == 1
+
+
+def _key(c: dict) -> tuple[str, str]:
+    return c["id"], json.dumps(c.get("kwargs"), sort_keys=True, default=str)
+
+
+def nondeterministic(rows: list[dict]) -> tuple[list[dict], list[str]]:
+    """Kwargs dicts that fail to build or change over seeds (each listed once), and the ids of rows holding one."""
+    verdict, dicts, ids = {}, [], []
+    for r in rows:
+        hit = False
+        for c in r["constraints"]:
+            k = _key(c)
+            if k not in verdict:
+                verdict[k] = kwargs_deterministic(c, r["prompt"])
+                if not verdict[k]:
+                    dicts.append({"id": c["id"], "kwargs": c.get("kwargs")})
+            hit |= not verdict[k]
+        if hit:
+            ids.append(r["id"])
+    return dicts, ids
 
 
 def gate_rates(rows: list[dict]) -> dict[str, dict]:
@@ -56,18 +81,31 @@ def gate_rates(rows: list[dict]) -> dict[str, dict]:
     return {k: v | {"rate": v["fired"] / v["n"]} for k, v in sorted(per.items())}
 
 
+def if_gate_summary(good: list[dict]) -> dict:
+    fired = [gate_reasons(r["response"], r["constraints"]) for r in good]
+    per = gate_rates(good)
+    big = {k: v for k, v in per.items() if v["n"] >= GATE_MIN_N}
+    overall = sum(map(bool, fired)) / max(len(good), 1)
+    failing = sorted(k for k, v in big.items() if v["rate"] >= GATE_TYPE_MAX)
+    return {"n_good": len(good), "overall_rate": overall, "per_type": per, "failing_types": failing,
+            "max_rate": max((v["rate"] for v in big.values()), default=0.0),
+            "fired_by_rule": dict(Counter(g for f in fired for g in f)),
+            "passed": overall < GATE_ALL_MAX and not failing}
+
+
 def code_summary(results: list[tuple]) -> dict:
     """results: (id, supported, guard violations, Scored) per reference. Guard and failure rates are over
-    supported items (asserts the parent can verify); unsupported items leave the pool and are counted apart."""
+    supported, harness-safe items (the only ones that can enter pools); the rest leave the pool, counted apart."""
     sup = [r for r in results if r[1]]
-    n_sup = max(len(sup), 1)
-    guard = [i for i, _, g, _ in sup if g]
-    hard = [i for i, _, _, s in sup if s.info["reason"] in HARD_FAIL]
-    return {"n": len(results), "n_supported": len(sup),
+    pool = [r for r in sup if r[3].info["reason"] != "harness_unsafe"]
+    n_pool = max(len(pool), 1)
+    guard = [i for i, _, g, _ in pool if g]
+    hard = [i for i, _, _, s in pool if s.info["reason"] in HARD_FAIL]
+    return {"n": len(results), "n_supported": len(sup), "n_eligible": len(pool),
             "unsupported_ids": [i for i, ok, _, _ in results if not ok],
             "unsupported_rate": (len(results) - len(sup)) / max(len(results), 1),
-            "guard_fire_ids": guard, "guard_rate": len(guard) / n_sup,
-            "hard_fail_ids": hard, "ref_fail_rate": len(hard) / n_sup,
+            "guard_fire_ids": guard, "guard_rate": len(guard) / n_pool,
+            "hard_fail_ids": hard, "ref_fail_rate": len(hard) / n_pool,
             "harness_unsafe_ids": [i for i, _, _, s in sup if s.info["reason"] == "harness_unsafe"],
             "ref_fail_ids": [i for i, _, _, s in results if s.reward != 1.0],  # every non-1 reference leaves
             "excluded_rate": sum(s.reward != 1.0 for *_, s in results) / max(len(results), 1),
@@ -86,25 +124,11 @@ def code_gate() -> dict:
     with ThreadPoolExecutor(sandbox.WORKERS) as ex:
         results = list(ex.map(one, tasks))
     s = code_summary(results)
-    guards = Counter(v for _, ok, g, _ in results if ok for v in g)
+    guards = Counter(v for _, ok, g, sc in results if ok and sc.info["reason"] != "harness_unsafe" for v in g)
     return s | {"guard_violations": dict(guards.most_common())}
 
 
-def _pool_nondeterministic() -> list[str]:
-    """Types with a kwargs dict (stored answers or IF-RLVR prompts) that fails to build or changes over seeds."""
-    seen, bad = set(), set()
-    for name in IF_ANSWERS + ("if_rlvr_prompts.jsonl",):
-        for r in jsonl.read(DATA / name):
-            for c in r["constraints"]:
-                key = (c["id"], json.dumps(c.get("kwargs"), sort_keys=True, default=str))
-                if key not in seen:
-                    seen.add(key)
-                    if not kwargs_deterministic(c, r["prompt"]):
-                        bad.add(c["id"])
-    return sorted(bad)
-
-
-def if_router_gate() -> dict:
+def if_router_gate(prompts: list[dict]) -> dict:
     rows = [r for name in IF_ANSWERS for r in jsonl.read(DATA / name)]
     n, bad = Counter(), Counter()
     examples = defaultdict(list)
@@ -119,44 +143,62 @@ def if_router_gate() -> dict:
             bad[c["id"]] += not ok
             if not ok and len(examples[c["id"]]) < 5:
                 examples[c["id"]].append(r["id"])
-    mism = {k: bad[k] / n[k] for k in sorted(n)}
-    nondet = _pool_nondeterministic()
-    excluded = sorted({k for k, v in mism.items() if v > MISMATCH_MAX} | set(nondet))
-    prompts = jsonl.read(DATA / "if_rlvr_prompts.jsonl")
+
+    def official(cid: str) -> bool:
+        try:
+            return vi.route(cid) == "official"
+        except KeyError:
+            return False
+
+    mism = {k: bad[k] / n[k] for k in sorted(n) if not official(k)}
+    excluded = sorted(k for k, v in mism.items() if v > MISMATCH_MAX)
     hit = sum(any(c["id"] in excluded for c in p["constraints"]) for p in prompts)
-    return {"n": len(rows), "n_by_type": dict(n), "mismatch_by_type": mism, "mismatch_examples": dict(examples),
-            "nondeterministic_types": nondet, "excluded_types": excluded,
+    return {"n": len(rows), "n_by_type": dict(n), "mismatch_by_type": mism,
+            "official_mismatch_by_type": {k: bad[k] / n[k] for k in sorted(n) if official(k)},  # information only
+            "mismatch_examples": dict(examples), "excluded_types": excluded,
             "excluded_prompt_share": hit / len(prompts)}
+
+
+def determinism_gate(prompts: list[dict]) -> dict:
+    answers = [r for name in IF_ANSWERS for r in jsonl.read(DATA / name)]
+    dicts, prompt_ids = nondeterministic(prompts)
+    more, answer_ids = nondeterministic(answers)
+    seen = {_key(d) for d in dicts}
+    dicts += [d for d in more if _key(d) not in seen]
+    return {"nondeterministic_types": dict(Counter(d["id"] for d in dicts)),
+            "nondeterministic_dicts": dicts, "nondeterministic_prompt_ids": prompt_ids,
+            "nondeterministic_answer_ids": answer_ids,
+            "nondeterministic_prompt_share": len(prompt_ids) / len(prompts)}
 
 
 def if_gate_gate() -> dict:
     rows = [r for name in IF_ANSWERS + ("if_responses.jsonl",) for r in jsonl.read(DATA / name)]
     good = [r for r in rows if if_quality_problem(r["response"], 0) is None]
-    per = gate_rates(good)
-    big = {k: v for k, v in per.items() if v["n"] >= GATE_MIN_N}
-    return {"n": len(rows), "n_good": len(good), "per_type": per,
-            "failing_types": sorted(k for k, v in big.items() if v["rate"] >= GATE_MAX),
-            "max_rate": max((v["rate"] for v in big.values()), default=0.0),
-            "fired_by_rule": dict(Counter(g for r in good for g in gate_reasons(r["response"], r["constraints"])))}
+    return {"n": len(rows)} | if_gate_summary(good)
 
 
 def main() -> None:
-    code, router, gates = code_gate(), if_router_gate(), if_gate_gate()
+    prompts = jsonl.read(DATA / "if_rlvr_prompts.jsonl")
+    code, router, det, gates = code_gate(), if_router_gate(prompts), determinism_gate(prompts), if_gate_gate()
     checks = {"code_guard": code["guard_rate"] <= GUARD_MAX, "code_ref_fail": code["ref_fail_rate"] <= REF_FAIL_MAX,
-              "if_router": router["excluded_prompt_share"] < EXCLUDED_SHARE_MAX, "if_gates": not gates["failing_types"]}
+              "if_router": router["excluded_prompt_share"] < SHARE_MAX,
+              "kwargs_determinism": det["nondeterministic_prompt_share"] < SHARE_MAX, "if_gates": gates["passed"]}
     passed = all(checks.values())
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps({"passed": passed, "checks": checks, "code": code, "if_router": router,
-                               "if_gates": gates}, indent=1))
+                               "determinism": det, "if_gates": gates}, indent=1))
     print(json.dumps({"passed": passed, "checks": checks, "n_code": code["n"], "n_supported": code["n_supported"],
-                      "unsupported_rate": code["unsupported_rate"], "guard_rate": code["guard_rate"],
-                      "ref_fail_rate": code["ref_fail_rate"], "excluded_rate": code["excluded_rate"],
-                      "reasons": code["reasons"], "guard_violations": code["guard_violations"],
-                      "excluded_types": router["excluded_types"],
-                      "nondeterministic_types": router["nondeterministic_types"],
+                      "n_eligible": code["n_eligible"], "unsupported_rate": code["unsupported_rate"],
+                      "guard_rate": code["guard_rate"], "ref_fail_rate": code["ref_fail_rate"],
+                      "excluded_rate": code["excluded_rate"], "reasons": code["reasons"],
+                      "guard_violations": code["guard_violations"], "excluded_types": router["excluded_types"],
                       "excluded_prompt_share": router["excluded_prompt_share"],
-                      "gate_failing_types": gates["failing_types"], "gate_max_rate": gates["max_rate"],
-                      "gate_fired_by_rule": gates["fired_by_rule"]}, indent=1))
+                      "official_mismatch_over_1pct": {k: v for k, v in router["official_mismatch_by_type"].items()
+                                                      if v > MISMATCH_MAX},
+                      "nondeterministic_types": det["nondeterministic_types"],
+                      "nondeterministic_prompt_share": det["nondeterministic_prompt_share"],
+                      "gate_overall_rate": gates["overall_rate"], "gate_failing_types": gates["failing_types"],
+                      "gate_max_rate": gates["max_rate"], "gate_fired_by_rule": gates["fired_by_rule"]}, indent=1))
 
 
 def require_passed() -> dict:

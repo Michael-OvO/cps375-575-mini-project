@@ -73,3 +73,11 @@ def test_official_none_kwargs_are_deterministic():
         random.seed(seed)
         results.add(tuple(vi.check("p", c, "one two three four five six")))
     assert results == {(True,)}
+
+
+def test_ifevalg_keeps_zero_kwargs():
+    c = {"id": "new:copy_span_idx", "kwargs": {"n_start": 0, "n_end": 4, "prompt_to_repeat": "Hello world"}}
+    for seed in range(5):
+        random.seed(seed)
+        assert vi._instance(c, "p").get_instruction_args()["n_start"] == 0
+    assert vi.check("p", [c], "Hello") == [True]

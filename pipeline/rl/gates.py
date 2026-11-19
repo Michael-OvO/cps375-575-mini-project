@@ -23,6 +23,7 @@ SIGNOFF_LINES = 4
 SIGNOFF_MIN_LINES = 10
 PLACEHOLDER_EXEMPT = {"square_brackets", "bigram_wrapping", "title", "number_placeholders", "bracket_tags"}
 REPEAT_EXEMPT_PARTS = ("copy", "repeat", "two_responses")
+SENTENCE_REPEAT_EXEMPT = {"constrained_response"}  # the answer is a fixed phrase
 UPPER = {"less than", "at most"}
 
 
@@ -76,7 +77,7 @@ def gate_reasons(response: str, constraints: list[dict]) -> list[str]:
     sents = [" ".join(s.lower().split()) for s in sentences(response)]
     counts = Counter(s for s in sents if len(s.split()) >= 3)
     if counts and max(counts.values()) >= 3 and not any(
-            _copy_type(c) for c in constraints):
+            _copy_type(c) or _suffix(c["id"]) in SENTENCE_REPEAT_EXEMPT for c in constraints):
         out.append("repeated_sentence")
     items = Counter(" ".join(m.lower().split()) for m in LIST_ITEM.findall(response))
     if items and max(items.values()) >= 2 and not any(_copy_type(c) for c in constraints):
