@@ -7,12 +7,19 @@ from collections import Counter
 from pipeline.constraints.extra import sentences
 from pipeline.select import _LABEL_LINE
 
-PLACEHOLDER = re.compile(r"\[[A-Za-z][A-Za-z _-]{0,30}\]|\{[a-z_]{1,30}\}|<placeholder>", re.I)
+# Not preceded by a word char, backslash, ^, _ or closing bracket (LaTeX subscripts, type hints, indexing), and a
+# bracket tag is not followed by "(" (markdown link). Fenced code is stripped before matching.
+_PRE = r"(?<![\w\\^_)\]}])"
+PLACEHOLDER = re.compile(
+    _PRE + r"(?:\[[A-Za-z][A-Za-z '_-]{0,30}\](?!\()|\{[a-z_]{1,30}\})|<placeholder>", re.I)
+CODE_FENCE = re.compile(r"```.*?(?:```|\Z)", re.S)
 SELF_EVAL = re.compile(
     r"(?im)^\W*(?:\(?\s*word count\s*:?\s*\d+|I have (?:followed|met|adhered to|satisfied) (?:all|every|the)"
     r"|(?:this|my) response (?:contains|has) (?:exactly )?\d+ (?:words|sentences))")
-LIST_ITEM = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.+?)\s*$", re.M)
-PLACEHOLDER_EXEMPT = {"square_brackets", "bigram_wrapping", "title", "number_placeholders"}
+LIST_ITEM = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.*\w.*?)\s*$", re.M)
+SLOT_WORDS = re.compile(r"insert|placeholder|fill|\bhere\b|xxx|^\{[a-z]\}$", re.I)
+SIGNOFF_LINES = 4
+PLACEHOLDER_EXEMPT = {"square_brackets", "bigram_wrapping", "title", "number_placeholders", "bracket_tags"}
 REPEAT_EXEMPT_PARTS = ("copy", "repeat", "two_responses")
 UPPER = {"less than", "at most"}
 
@@ -22,7 +29,20 @@ def _suffix(cid: str) -> str:
 
 
 def _asks_brackets(c: dict) -> bool:
-    return any(isinstance(v, str) and ("[" in v or "{" in v) for v in (c.get("kwargs") or {}).values())
+    def has(v) -> bool:
+        if isinstance(v, str):
+            return "[" in v or "{" in v
+        return isinstance(v, (list, tuple)) and any(has(x) for x in v)
+    return any(has(v) for v in (c.get("kwargs") or {}).values())
+
+
+def _template_like(response: str) -> bool:
+    """Template-style non-answer: a slot-word token anywhere, or 3+ distinct tokens outside the sign-off block."""
+    response = CODE_FENCE.sub("", response)
+    if any(SLOT_WORDS.search(m.group()) for m in PLACEHOLDER.finditer(response)):
+        return True
+    body = "\n".join(response.rstrip().split("\n")[:-SIGNOFF_LINES])
+    return len({m.group().lower() for m in PLACEHOLDER.finditer(body)}) >= 3
 
 
 def _short_ok(c: dict) -> bool:
@@ -38,7 +58,7 @@ def gate_reasons(response: str, constraints: list[dict]) -> list[str]:
     out = []
     if _LABEL_LINE.search(response):
         out.append("label_line")
-    if PLACEHOLDER.search(response) and not any(
+    if _template_like(response) and not any(
             _suffix(c["id"]) in PLACEHOLDER_EXEMPT or _asks_brackets(c) for c in constraints):
         out.append("placeholder")
     sents = [" ".join(s.lower().split()) for s in sentences(response)]
