@@ -6,10 +6,13 @@ import ast
 
 BANNED_MODULES = {"subprocess", "ctypes", "importlib", "inspect", "gc", "pickle", "marshal", "types", "code",
                   "codeop", "runpy", "pdb", "traceback", "posix", "nt", "signal", "faulthandler"}
-EXIT_NAMES = {"_exit", "abort", "kill", "killpg", "execv", "execve", "execl", "execle", "execlp", "execlpe",
-              "execvp", "execvpe", "posix_spawn", "posix_spawnp", "spawnv", "spawnve", "spawnl", "spawnle",
-              "spawnlp", "spawnlpe", "spawnvp", "spawnvpe", "system", "popen", "fork", "forkpty", "settrace",
-              "setprofile", "_getframe", "_current_frames", "excepthook", "unraisablehook", "addaudithook"}
+BARE_EXIT = {"_exit", "_getframe", "_current_frames", "settrace", "setprofile", "excepthook", "unraisablehook",
+             "addaudithook"}
+# Reachable only through an attribute read or a from-import, so a bare local name of these is harmless.
+ATTR_EXIT = {"abort", "kill", "killpg", "execv", "execve", "execl", "execle", "execlp", "execlpe", "execvp",
+             "execvpe", "posix_spawn", "posix_spawnp", "spawnv", "spawnve", "spawnl", "spawnle", "spawnlp",
+             "spawnlpe", "spawnvp", "spawnvpe", "system", "popen", "fork", "forkpty"}
+EXIT_NAMES = BARE_EXIT | ATTR_EXIT
 DYNAMIC = {"exec", "eval", "compile", "__import__", "breakpoint", "vars", "locals", "globals"}
 ATTR_GETTERS = {"attrgetter", "methodcaller"}
 DUNDER_OK = {"__init__", "__name__", "__len__", "__iter__", "__next__", "__lt__", "__le__", "__gt__", "__ge__",
@@ -18,13 +21,13 @@ DUNDER_OK = {"__init__", "__name__", "__len__", "__iter__", "__next__", "__lt__"
 BANNED_CALLS = {"sys.exit", "os._exit", "os.kill", "os.system", "exit", "quit", "sys._getframe"} | DYNAMIC
 BANNED_FROM = {"sys": {"exit", "_getframe", "_current_frames"}, "os": {"_exit", "kill", "system"},
                "unittest": {"mock"}}
-FRAME_ATTRS = EXIT_NAMES | {"f_back", "f_locals", "f_globals", "f_code", "tb_frame", "gi_frame", "cr_frame", "co_consts",
+FRAME_ATTRS = BARE_EXIT | {"f_back", "f_locals", "f_globals", "f_code", "tb_frame", "gi_frame", "cr_frame", "co_consts",
                "_getframe", "_current_frames", "walk_stack", "extract_stack", "currentframe", "settrace",
                "setprofile", "__getattribute__", "__traceback__", "exc_info", "ag_frame"}
 EQ_NAMES = {"__eq__", "__ne__"}
 REBIND_NAMES = {"print", "AssertionError"}
 MODULE_ATTRS = {"exit", "_exit", "kill", "system", "print", "AssertionError"}
-GATED_MODULES = {"os", "sys", "builtins", "__builtins__"}
+GATED_MODULES = {"os", "sys", "posix", "builtins", "__builtins__"}
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
 LOCAL_OK = {"exit", "quit"} | (DYNAMIC - {"__import__"})
 
@@ -136,7 +139,7 @@ def violations(code: str) -> list[str]:
                         out.add(f"str:{arg.value}")
                     elif arg.value in FRAME_ATTRS:
                         out.add(f"getattr:{arg.value}")
-                    elif arg.value in MODULE_ATTRS and n.args and gated(n.args[0]):
+                    elif arg.value in MODULE_ATTRS | ATTR_EXIT and n.args and gated(n.args[0]):
                         out.add(f"getattr:{arg.value}")
         elif isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in FRAME_ATTRS:
             out.add(f"getattr:{n.value}")
@@ -154,9 +157,9 @@ def violations(code: str) -> list[str]:
             for k in n.keys:
                 if isinstance(k, ast.Constant) and k.value in EQ_NAMES:
                     out.add(f"str:{k.value}")
-        elif isinstance(n, ast.Attribute) and (n.attr in FRAME_ATTRS or n.attr in ATTR_GETTERS
+        elif isinstance(n, ast.Attribute) and (n.attr in FRAME_ATTRS or n.attr in ATTR_EXIT or n.attr in ATTR_GETTERS
                                                or (_dunder(n.attr) and n.attr not in DUNDER_OK)):
-            if n.attr in FRAME_ATTRS:
+            if n.attr in FRAME_ATTRS or n.attr in ATTR_EXIT:
                 out.add(f"attr:{n.attr}")
             elif n.attr in ATTR_GETTERS:
                 out.add(f"call:{n.attr}")

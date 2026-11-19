@@ -3,6 +3,8 @@ import pytest
 from pipeline.rl.code_guard import violations
 
 CLEAN = [
+    "def f(kill, system):\n    return kill + system",
+    "def f(o):\n    return getattr(o, 'system', None)",
     "def f(x):\n    return x\nif __name__ == '__main__':\n    f(1)",
     "class P:\n    def __init__(self, v):\n        self.v = v\n    def __repr__(self):\n        return str(self.v)\n"
     "    def __lt__(self, o):\n        return self.v < o.v",
