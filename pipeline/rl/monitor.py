@@ -14,16 +14,21 @@ DOMAINS = ("math", "if", "code")
 
 
 def _mean(rows: list[dict], key: str) -> float:
-    vals = [r[key] for r in rows if key in r and r[key] is not None]
-    return sum(vals) / len(vals) if vals else 0.0
+    vals = [r[key] for r in rows if r.get(key) is not None]
+    if not vals:
+        raise KeyError(key)
+    return sum(vals) / len(vals)
 
 
 def train_checks(rows: list[dict], base: dict) -> tuple[list[str], list[str]]:
     pauses, warns = [], []
+    # sampler and trainer disagree on logprobs: a datum bug, never noise; any step, no window, no warmup
+    if rows and rows[-1]["kl_sample_train"] > 0.01:
+        pauses.append(f"kl_sample_train {rows[-1]['kl_sample_train']:.4f} > 0.01 at step {rows[-1]['step']}")
     w = rows[-WINDOW:]
     if len(w) < WINDOW:
         return pauses, warns
-    late = w[-1]["step"] + 1 >= WARMUP
+    late = w[-1]["step"] >= WARMUP  # train_log steps are 0-based (Task 18 logs the step index from 0)
     for d in DOMAINS:
         b = base[d]
         ln, tr = _mean(w, f"{d}/len"), _mean(w, f"{d}/trunc")
@@ -43,9 +48,6 @@ def train_checks(rows: list[dict], base: dict) -> tuple[list[str], list[str]]:
                        _mean(rows[-10:], f"{d}/reward"))
             if z < m < a and a - z > 0.02:
                 warns.append(f"{d}/reward falling over 30 steps ({a:.3f} -> {z:.3f})")
-    k = _mean(w, "kl_sample_train")
-    if k > 0.01:  # sampler and trainer disagree on logprobs: a datum bug, never noise
-        pauses.append(f"kl_sample_train {k:.4f} > 0.01")
     return pauses, warns
 
 
@@ -57,7 +59,10 @@ def eval_checks(ev: dict, base_trap: float, step: int) -> tuple[list[str], list[
     pauses, warns = [], []
     new = equiv.per_task(ev["items"])
     for t in ("math", "code", "if"):
-        r = equiv.compare(equiv.load_v4_items(t), new[t])
+        base = equiv.load_v4_items(t)
+        shared = len(set(base) & set(new[t]))
+        assert shared == len(base), f"{t}: eval items cover {shared} of {len(base)} v4 items"
+        r = equiv.compare(base, new[t])
         if r["diff"] < -2 * r["se"]:
             (pauses if step >= WARMUP * 2 else warns).append(
                 f"dev {t} {r['diff']:+.3f} below v4 by more than 2 SE ({r['se']:.3f})")

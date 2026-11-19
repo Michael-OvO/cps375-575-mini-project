@@ -84,3 +84,40 @@ def test_warn_appends_jsonl(tmp_path, monkeypatch):
     M.warn([], 8)
     lines = (tmp_path / "rl1" / "warnings.jsonl").read_text().splitlines()
     assert len(lines) == 2 and '"step": 7' in lines[0]
+
+
+def test_kl_pauses_at_any_step_without_full_window():
+    p, _ = M.train_checks(_rows(3, kl_sample_train=0.02), BASE)
+    assert any("kl_sample_train" in x for x in p)
+
+
+def test_kl_latest_row_spike_pauses():
+    rows = _rows(12)
+    rows[-1]["kl_sample_train"] = 0.05
+    p, _ = M.train_checks(rows, BASE)
+    assert any("kl_sample_train" in x for x in p)
+
+
+def test_warmup_boundary_is_zero_based():
+    p, w = M.train_checks(_rows(20, **{"math/len": 1200}), BASE)  # last step 19
+    assert not p and any("math/len" in x for x in w)
+    p, _ = M.train_checks(_rows(21, **{"math/len": 1200}), BASE)  # last step 20
+    assert any("math/len" in x for x in p)
+
+
+def test_missing_key_raises():
+    rows = _rows(10)
+    for r in rows:
+        del r["math/len"]
+    import pytest
+    with pytest.raises(KeyError):
+        M.train_checks(rows, BASE)
+
+
+def test_eval_requires_full_coverage(monkeypatch):
+    import pytest
+    _patch_v4(monkeypatch)
+    ev = _ev()
+    ev["items"] = ev["items"][1:]
+    with pytest.raises(AssertionError):
+        M.eval_checks(ev, 0.0, 50)
