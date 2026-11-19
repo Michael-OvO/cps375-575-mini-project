@@ -10,7 +10,7 @@ BANNED_FROM = {"sys": {"exit", "_getframe", "_current_frames"}, "os": {"_exit", 
                "unittest": {"mock"}}
 FRAME_ATTRS = {"f_back", "f_locals", "f_globals", "f_code", "tb_frame", "gi_frame", "cr_frame", "co_consts",
                "_getframe", "_current_frames", "walk_stack", "extract_stack", "currentframe", "settrace",
-               "setprofile"}
+               "setprofile", "__getattribute__", "__traceback__", "exc_info", "ag_frame"}
 EQ_NAMES = {"__eq__", "__ne__"}
 REBIND_NAMES = {"print", "AssertionError"}
 MODULE_ATTRS = {"exit", "_exit", "kill", "system", "print", "AssertionError"}
@@ -107,9 +107,10 @@ def violations(code: str) -> list[str]:
             name = _dotted(n.func, aliases)
             if name in BANNED_CALLS and not (name in LOCAL_OK and locally_bound(n, name)):
                 out.add(f"call:{name}")
-            if name in {"getattr", "setattr", "delattr"}:
+            if name in {"getattr", "setattr", "delattr", "hasattr"}:
                 for arg in n.args[1:2]:
                     if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+                        out.add("getattr:dynamic")
                         continue
                     if name == "setattr" and arg.value in EQ_NAMES:
                         out.add(f"str:{arg.value}")
@@ -117,6 +118,10 @@ def violations(code: str) -> list[str]:
                         out.add(f"getattr:{arg.value}")
                     elif arg.value in MODULE_ATTRS and n.args and gated(n.args[0]):
                         out.add(f"getattr:{arg.value}")
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in FRAME_ATTRS:
+            out.add(f"getattr:{n.value}")
+        elif isinstance(n, ast.Name) and n.id in FRAME_ATTRS:
+            out.add(f"attr:{n.id}")
         elif isinstance(n, ast.Dict):
             for k in n.keys:
                 if isinstance(k, ast.Constant) and k.value in EQ_NAMES:

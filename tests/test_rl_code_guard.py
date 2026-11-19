@@ -3,6 +3,7 @@ import pytest
 from pipeline.rl.code_guard import violations
 
 CLEAN = [
+    "def f(o):\n    return getattr(o, 'name', None)",
     "import sys\ndef f(n):\n    return min(n, sys.maxsize)",
     "import os\ndef f(p):\n    return os.path.join(p, 'x')",
     "def find_exit(grid):\n    return len(grid)",
@@ -51,6 +52,11 @@ DIRTY = {
     "import builtins\nsetattr(builtins, 'print', None)": "getattr:print",
     "import os\ndef f():\n    return getattr(os, 'system')": "getattr:system",
     "def f():\n    exit()\ndef g(exit):\n    pass": "call:exit",
+    "import sys\ndef f():\n    return sys.exc_info()[2]": "attr:exc_info",
+    "def f(t):\n    return getattr(t, 'tb_'+'frame')": "getattr:dynamic",
+    "def f(t):\n    return object.__getattribute__(t, 'tb_frame')": "attr:__getattribute__",
+    "def f(t, n):\n    return hasattr(t, n)": "getattr:dynamic",
+    "def f(t):\n    return t.f_locals": "attr:f_locals",
 }
 
 

@@ -81,3 +81,11 @@ def test_temp_dir_listing_yields_nothing():
 
 def test_wrong_solution_scores_zero():
     assert _reward("def add(a, b):\n    return a - b").reward == 0.0
+
+
+def test_traceback_walk_to_launcher_token_scores_zero():
+    body = ("def add(a, b):\n    try:\n        1 / 0\n    except Exception as e:\n"
+            "        f = e.__traceback__.tb_frame.f_back\n        print(f.f_locals.get('token'))\n"
+            "    raise SystemExit(0)")
+    s = _reward(body)
+    assert s.reward == 0.0 and s.info["reason"] == "guard"
