@@ -4,3 +4,6 @@
 {"step": 80, "time": 1795061592.28813, "warning": "if/reward falling over 30 steps (0.859 -> 0.817)"}
 {"step": 120, "time": 1795063686.637558, "warning": "if/reward falling over 30 steps (0.856 -> 0.817)"}
 {"step": 170, "time": 1795067696.272952, "warning": "if/reward falling over 30 steps (0.862 -> 0.816)"}
+{"step": 170, "time": 1795068831.867724, "warning": "math/trunc 0.030 > 2x baseline 0.002 + 0.02"}
+{"step": 170, "time": 1795068831.867734, "warning": "math/reward falling over 30 steps (0.668 -> 0.619)"}
+{"step": 170, "time": 1795068831.867737, "warning": "if/reward falling over 30 steps (0.862 -> 0.817)"}

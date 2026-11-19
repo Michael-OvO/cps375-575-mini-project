@@ -472,3 +472,11 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 - Monitor for this branch (approved): math sampled truncation warns on the usual line and pauses only above 15%
   (window from step 160); greedy cut-offs at 4,096 are the gate: stop if > 9/325 or greedy math < 76.2 at the
   step-170b or 180b eval. Run length: 20 steps (to 180), then review.
+- Result: the step-170b eval failed both stop conditions: greedy math cut-offs 14/325 (gate 9), greedy math 76.0
+  (gate 76.2). Dev greedy 170b, math / code / IF seen / unseen / unseen_new: 76.0 / 77.2 / 78.6 / 62.6 / 56.2 (IF avg
+  65.8); mean greedy math length 604 (160: 530). Only 4 of the 14 cut-off problems overlap with step 160 or 170, so
+  the cut-offs are general length drift, not a few prompts. Sampled math trunc at the 3,584 cap ran ~3%/step and
+  length dipped late (468–576 tokens at steps 169–171), but not enough by the 170b checkpoint.
+- Stopped by hand at step 176 (state saved at 170b; steps 171–176 trained, unsaved, not used). Spend $97.96.
+- Conclusion: past step 160, both fixes (graded truncation, then the training cap) failed to stop greedy length
+  drift within 10 steps, and math fell each time. RL ends at step 160; Phase 5 uses checkpoints <= 160.
