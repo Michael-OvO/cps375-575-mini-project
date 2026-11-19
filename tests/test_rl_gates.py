@@ -107,3 +107,10 @@ def test_constrained_response_exempt_from_repeated_sentence():
     assert "repeated_sentence" in gate_reasons(text, KW)
     cr = [{"id": "detectable_format:constrained_response", "kwargs": {}}]
     assert "repeated_sentence" not in gate_reasons(text, cr)
+
+
+def test_traps_file_shape():
+    from pipeline.rl import traps
+    rows = traps.build()
+    assert len(rows) == 50 and len({r["prompt"] for r in rows}) == 50
+    assert traps.hack_rate([(rows[0], "Keyword: x\nthing thing thing")]) == 1.0

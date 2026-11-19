@@ -353,3 +353,8 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
 - An independent review of the RL spec found 6 critical issues (macOS RLIMIT_AS, stub-test wording, IF verifier
   routing, IF gate false positives, per-prompt bands, harness-safe code) plus high/medium ones. All are fixed
   in spec v3 (`docs/superpowers/specs/2026-11-16-rl-design.md`).
+
+### rl1 prompt pools (2026-11-18)
+
+- Built locally ($0) by `pipeline.rl.pools`: math 6,545, IF 9,000 chosen (target reached, bins 2,250/5,400/1,350 =
+  25/60/15), code 14,999 kept (stub_passes 32). 50 trap prompts in `data/rl_traps.jsonl` stay out of every pool.

@@ -1,0 +1,45 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+{
+ "math": {
+  "n": 6545,
+  "drops": {
+   "leak": 586,
+   "dev": 479,
+   "dev_overlap": 76,
+   "teacher_dev_overlap": 3,
+   "teacher_leak": 9,
+   "teacher_no_agreement": 24778
+  }
+ },
+ "if": {
+  "candidates": 85291,
+  "drops": {
+   "nondeterministic_phase0": 820,
+   "leak": 7,
+   "dev_overlap": 50,
+   "dev": 500,
+   "nondeterministic": 205
+  },
+  "target": 9000,
+  "chosen": 9000,
+  "bins": {
+   "4-5": 1350,
+   "2-3": 5400,
+   "1": 2250
+  }
+ },
+ "code": {
+  "kept": 14999,
+  "drops": {
+   "reference_fails": 2960,
+   "dev": 657,
+   "dev_overlap": 515,
+   "leak": 262,
+   "unsupported_tests": 711,
+   "guessable_constant": 98,
+   "set_order_flaky": 2,
+   "few_asserts": 10,
+   "stub_passes": 32
+  }
+ }
+}
