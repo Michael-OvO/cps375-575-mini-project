@@ -20,14 +20,14 @@ PS: 👀🔍🗿🌑 due to No features in text.
  "n_eligible": 16382,
  "unsupported_rate": 0.03513540225340976,
  "guard_rate": 0.0017091930167256746,
- "ref_fail_rate": 6.104260774020266e-05,
- "excluded_rate": 0.19188574817157542,
+ "ref_fail_rate": 0.00012208521548040532,
+ "excluded_rate": 0.1919351650523819,
  "reasons": {
-  "pass": 16353,
+  "pass": 16352,
   "harness_unsafe": 3429,
   "unsupported_tests": 422,
   "guard": 31,
-  "fail": 1
+  "fail": 2
  },
  "guard_violations": {
   "getattr:dynamic": 9,

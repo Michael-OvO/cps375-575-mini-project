@@ -53,8 +53,8 @@ def test_nondeterministic_drops_dicts_not_types():
     rows = [{"id": "p1", "prompt": "p", "constraints": [good]},
             {"id": "p2", "prompt": "p", "constraints": [good, bad]},
             {"id": "p3", "prompt": "p", "constraints": [bad]}]
-    dicts, ids = G.nondeterministic(rows)
-    assert dicts == [bad] and ids == ["p2", "p3"]
+    dicts, ids, n = G.nondeterministic(rows)
+    assert dicts == [bad] and ids == ["p2", "p3"] and n == 2
 
 
 def _row(i, cid, response):
@@ -73,3 +73,47 @@ def test_if_gate_summary_thresholds():
     rows = [_row(i, "a:a", clean) for i in range(194)] + [_row(194 + i, "a:a", dirty) for i in range(6)]
     s = G.if_gate_summary(rows)
     assert s["failing_types"] == ["a:a"] and not s["passed"]
+
+
+def test_code_summary_flaky_hard_failure_is_not_counted():
+    results = [("a", True, [], Scored(0.0, {"reason": "fail"})), ("b", True, [], Scored(0.0, {"reason": "timeout"}))]
+    s = G.code_summary(results, recheck_pass={"a"})
+    assert s["hard_fail_ids"] == ["b"] and s["flaky_ids"] == ["a"] and s["ref_fail_rate"] == 1 / 2
+    assert s["ref_fail_ids"] == ["a", "b"]  # flaky references still leave the pool
+
+
+def _ok_inputs():
+    code = G.code_summary([("a", True, [], Scored(1.0, {"reason": "pass"}))])
+    router = {"n": 1, "n_prompts": 1, "excluded_prompt_share": 0.0}
+    det = {"n_checked": 1, "n_prompts": 1, "nondeterministic_prompt_share": 0.0}
+    gates = G.if_gate_summary([_row(i, "a:a", "A clean answer about trees and their shade here.") for i in range(50)])
+    return code, router, det, gates
+
+
+def test_gate_checks_pass_on_good_inputs():
+    assert all(G.gate_checks(*_ok_inputs()).values())
+
+
+def test_gate_checks_fail_closed_on_empty_code():
+    code, router, det, gates = _ok_inputs()
+    for empty in ([], [("a", True, [], Scored(0.0, {"reason": "harness_unsafe"}))]):
+        c = G.gate_checks(G.code_summary(empty), router, det, gates)
+        assert not c["code_guard"] and not c["code_ref_fail"]
+
+
+def test_gate_checks_fail_closed_on_empty_router():
+    code, router, det, gates = _ok_inputs()
+    assert not G.gate_checks(code, router | {"n": 0}, det, gates)["if_router"]
+    assert not G.gate_checks(code, router | {"n_prompts": 0}, det, gates)["if_router"]
+
+
+def test_gate_checks_fail_closed_on_empty_determinism():
+    code, router, det, gates = _ok_inputs()
+    assert not G.gate_checks(code, router, det | {"n_checked": 0}, gates)["kwargs_determinism"]
+    assert not G.gate_checks(code, router, det | {"n_prompts": 0}, gates)["kwargs_determinism"]
+
+
+def test_if_gate_fails_closed_on_empty_or_small_types():
+    assert not G.if_gate_summary([])["passed"]
+    small = [_row(i, "a:a", "A clean answer about trees and their shade here.") for i in range(49)]
+    assert not G.if_gate_summary(small)["passed"]  # no type with n >= 50

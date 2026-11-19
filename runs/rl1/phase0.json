@@ -757,9 +757,11 @@
   ],
   "guard_rate": 0.0017091930167256746,
   "hard_fail_ids": [
+   "oci-586084257469",
    "oci-4c408a856586"
   ],
-  "ref_fail_rate": 6.104260774020266e-05,
+  "flaky_ids": [],
+  "ref_fail_rate": 0.00012208521548040532,
   "harness_unsafe_ids": [
    "ct-5-0-0",
    "ct-7-0-1",
@@ -6160,6 +6162,7 @@
    "oci-e66be38c85e9",
    "oci-1a35111343c8",
    "oci-20df7ae937e6",
+   "oci-586084257469",
    "oci-85ba06d31737",
    "oci-d30a468eb4ca",
    "oci-a81cab507319",
@@ -7790,13 +7793,13 @@
    "oci-0c18c388d853",
    "oci-06be86666263"
   ],
-  "excluded_rate": 0.19188574817157542,
+  "excluded_rate": 0.1919351650523819,
   "reasons": {
-   "pass": 16353,
+   "pass": 16352,
    "harness_unsafe": 3429,
    "unsupported_tests": 422,
    "guard": 31,
-   "fail": 1
+   "fail": 2
   },
   "guard_violations": {
    "getattr:dynamic": 9,
@@ -7818,6 +7821,7 @@
  },
  "if_router": {
   "n": 8207,
+  "n_prompts": 68873,
   "n_by_type": {
    "length_constraints:number_sentences": 594,
    "keywords:frequency": 633,
@@ -7939,6 +7943,8 @@
   "excluded_prompt_share": 0.0
  },
  "determinism": {
+  "n_checked": 46403,
+  "n_prompts": 68873,
   "nondeterministic_types": {
    "length_constraints:nth_paragraph_first_word": 772
   },

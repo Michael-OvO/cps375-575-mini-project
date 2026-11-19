@@ -49,8 +49,9 @@ def _key(c: dict) -> tuple[str, str]:
     return c["id"], json.dumps(c.get("kwargs"), sort_keys=True, default=str)
 
 
-def nondeterministic(rows: list[dict]) -> tuple[list[dict], list[str]]:
-    """Kwargs dicts that fail to build or change over seeds (each listed once), and the ids of rows holding one."""
+def nondeterministic(rows: list[dict]) -> tuple[list[dict], list[str], int]:
+    """Kwargs dicts that fail to build or change over seeds (each listed once), the ids of rows holding one, and
+    the number of distinct dicts checked."""
     verdict, dicts, ids = {}, [], []
     for r in rows:
         hit = False
@@ -63,7 +64,7 @@ def nondeterministic(rows: list[dict]) -> tuple[list[dict], list[str]]:
             hit |= not verdict[k]
         if hit:
             ids.append(r["id"])
-    return dicts, ids
+    return dicts, ids, len(verdict)
 
 
 def gate_rates(rows: list[dict]) -> dict[str, dict]:
@@ -90,22 +91,26 @@ def if_gate_summary(good: list[dict]) -> dict:
     return {"n_good": len(good), "overall_rate": overall, "per_type": per, "failing_types": failing,
             "max_rate": max((v["rate"] for v in big.values()), default=0.0),
             "fired_by_rule": dict(Counter(g for f in fired for g in f)),
-            "passed": overall < GATE_ALL_MAX and not failing}
+            "passed": bool(good) and bool(big) and overall < GATE_ALL_MAX and not failing}
 
 
-def code_summary(results: list[tuple]) -> dict:
+def code_summary(results: list[tuple], recheck_pass: set[str] = frozenset()) -> dict:
     """results: (id, supported, guard violations, Scored) per reference. Guard and failure rates are over
-    supported, harness-safe items (the only ones that can enter pools); the rest leave the pool, counted apart."""
+    supported, harness-safe items (the only ones that can enter pools); the rest leave the pool, counted apart.
+    A first-run hard failure in recheck_pass passed its serial recheck: it is flaky, not a hard failure (it still
+    leaves the pool, as does every reference that scored below 1)."""
     sup = [r for r in results if r[1]]
     pool = [r for r in sup if r[3].info["reason"] != "harness_unsafe"]
     n_pool = max(len(pool), 1)
     guard = [i for i, _, g, _ in pool if g]
-    hard = [i for i, _, _, s in pool if s.info["reason"] in HARD_FAIL]
+    first = [i for i, _, _, s in pool if s.info["reason"] in HARD_FAIL]
+    hard = [i for i in first if i not in recheck_pass]
     return {"n": len(results), "n_supported": len(sup), "n_eligible": len(pool),
             "unsupported_ids": [i for i, ok, _, _ in results if not ok],
             "unsupported_rate": (len(results) - len(sup)) / max(len(results), 1),
             "guard_fire_ids": guard, "guard_rate": len(guard) / n_pool,
-            "hard_fail_ids": hard, "ref_fail_rate": len(hard) / n_pool,
+            "hard_fail_ids": hard, "flaky_ids": [i for i in first if i in recheck_pass],
+            "ref_fail_rate": len(hard) / n_pool,
             "harness_unsafe_ids": [i for i, _, _, s in sup if s.info["reason"] == "harness_unsafe"],
             "ref_fail_ids": [i for i, _, _, s in results if s.reward != 1.0],  # every non-1 reference leaves
             "excluded_rate": sum(s.reward != 1.0 for *_, s in results) / max(len(results), 1),
@@ -116,14 +121,20 @@ def code_gate() -> dict:
     tasks = jsonl.read(DATA / "code_tasks.jsonl") + jsonl.read(DATA / "oci_tasks.jsonl")
     tasks = [t for t in tasks if len(t["tests"]) + len(t.get("hidden_tests", [])) >= 5]
 
+    def score(t):
+        return code_reward(f"```python\n{t['code']}\n```", t["tests"], t.get("hidden_tests", []), False)
+
     def one(t):
         tests = t["tests"] + t.get("hidden_tests", [])
-        s = code_reward(f"```python\n{t['code']}\n```", t["tests"], t.get("hidden_tests", []), False)
-        return t["id"], split_tests(tests) is not None, code_guard.violations(t["code"]), s
+        return t["id"], split_tests(tests) is not None, code_guard.violations(t["code"]), score(t)
 
     with ThreadPoolExecutor(sandbox.WORKERS) as ex:
         results = list(ex.map(one, tasks))
-    s = code_summary(results)
+    by_id = {t["id"]: t for t in tasks}
+    # Serial recheck (one at a time, no load): a hard failure counts only if it fails again.
+    recheck_pass = {i for i, _, _, s in results
+                    if s.info["reason"] in HARD_FAIL and score(by_id[i]).reward == 1.0}
+    s = code_summary(results, recheck_pass)
     guards = Counter(v for _, ok, g, sc in results if ok and sc.info["reason"] != "harness_unsafe" for v in g)
     return s | {"guard_violations": dict(guards.most_common())}
 
@@ -153,22 +164,22 @@ def if_router_gate(prompts: list[dict]) -> dict:
     mism = {k: bad[k] / n[k] for k in sorted(n) if not official(k)}
     excluded = sorted(k for k, v in mism.items() if v > MISMATCH_MAX)
     hit = sum(any(c["id"] in excluded for c in p["constraints"]) for p in prompts)
-    return {"n": len(rows), "n_by_type": dict(n), "mismatch_by_type": mism,
+    return {"n": len(rows), "n_prompts": len(prompts), "n_by_type": dict(n), "mismatch_by_type": mism,
             "official_mismatch_by_type": {k: bad[k] / n[k] for k in sorted(n) if official(k)},  # information only
             "mismatch_examples": dict(examples), "excluded_types": excluded,
-            "excluded_prompt_share": hit / len(prompts)}
+            "excluded_prompt_share": hit / max(len(prompts), 1)}
 
 
 def determinism_gate(prompts: list[dict]) -> dict:
     answers = [r for name in IF_ANSWERS for r in jsonl.read(DATA / name)]
-    dicts, prompt_ids = nondeterministic(prompts)
-    more, answer_ids = nondeterministic(answers)
+    dicts, prompt_ids, n_prompt = nondeterministic(prompts)
+    more, answer_ids, n_answer = nondeterministic(answers)
     seen = {_key(d) for d in dicts}
     dicts += [d for d in more if _key(d) not in seen]
-    return {"nondeterministic_types": dict(Counter(d["id"] for d in dicts)),
+    return {"n_checked": n_prompt + n_answer, "n_prompts": len(prompts), "nondeterministic_types": dict(Counter(d["id"] for d in dicts)),
             "nondeterministic_dicts": dicts, "nondeterministic_prompt_ids": prompt_ids,
             "nondeterministic_answer_ids": answer_ids,
-            "nondeterministic_prompt_share": len(prompt_ids) / len(prompts)}
+            "nondeterministic_prompt_share": len(prompt_ids) / max(len(prompts), 1)}
 
 
 def if_gate_gate() -> dict:
@@ -177,12 +188,20 @@ def if_gate_gate() -> dict:
     return {"n": len(rows)} | if_gate_summary(good)
 
 
+def gate_checks(code: dict, router: dict, det: dict, gates: dict) -> dict[str, bool]:
+    """Each check fails closed: an empty population (no data read) never passes."""
+    has_code = code["n_eligible"] > 0
+    return {"code_guard": has_code and code["guard_rate"] <= GUARD_MAX,
+            "code_ref_fail": has_code and code["ref_fail_rate"] <= REF_FAIL_MAX,
+            "if_router": router["n"] > 0 and router["n_prompts"] > 0 and router["excluded_prompt_share"] < SHARE_MAX,
+            "kwargs_determinism": det["n_checked"] > 0 and det["n_prompts"] > 0 and det["nondeterministic_prompt_share"] < SHARE_MAX,
+            "if_gates": gates["passed"]}
+
+
 def main() -> None:
     prompts = jsonl.read(DATA / "if_rlvr_prompts.jsonl")
     code, router, det, gates = code_gate(), if_router_gate(prompts), determinism_gate(prompts), if_gate_gate()
-    checks = {"code_guard": code["guard_rate"] <= GUARD_MAX, "code_ref_fail": code["ref_fail_rate"] <= REF_FAIL_MAX,
-              "if_router": router["excluded_prompt_share"] < SHARE_MAX,
-              "kwargs_determinism": det["nondeterministic_prompt_share"] < SHARE_MAX, "if_gates": gates["passed"]}
+    checks = gate_checks(code, router, det, gates)
     passed = all(checks.values())
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps({"passed": passed, "checks": checks, "code": code, "if_router": router,
