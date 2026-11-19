@@ -1,3 +1,7 @@
+import asyncio
+
+import pytest
+
 from pipeline.rl import rewards as R
 
 TESTS = ["assert add(1, 2) == 3"]
@@ -205,3 +209,34 @@ def test_supported_non_eq_forms_score():
 def test_timeout_reason():
     s = _reward("def add(a, b):\n    while True:\n        pass")
     assert s.reward == 0.0 and s.info["reason"] == "timeout"
+
+
+def test_math_reward_uses_graded_scorer():
+    assert asyncio.run(R.math_reward("2+2 is four.\n\nANSWER: 4", "4", False)).reward == 1.0
+    assert asyncio.run(R.math_reward("ANSWER: 5", "4", False)).reward == 0.0
+    assert asyncio.run(R.math_reward("ANSWER: 4", "4", True)).reward == 0.0
+    assert asyncio.run(R.math_reward("ANSWER: \\frac{1}{2}", "0.5", False)).reward == 1.0
+
+
+def test_if_reward_formula_and_max():
+    assert R.if_max(1) == pytest.approx(0.5 + 2 / (4 * 1.54))
+    assert R.if_max(5) == pytest.approx(2.1234, abs=1e-3)
+    c = [{"id": "change_case:english_lowercase", "kwargs": {}},
+         {"id": "punctuation:no_comma", "kwargs": {}}]
+    full = R.if_reward("p", c, "trees shade the street and cool the air for everyone", False)
+    assert full.reward == pytest.approx(R.if_max(2)) and full.info["norm"] == pytest.approx(1.0)
+    half = R.if_reward("p", c, "Trees shade the street and cool the air for everyone", False)
+    assert 0 < half.reward < full.reward
+
+
+def test_if_reward_gate_and_truncation_zero():
+    c = [{"id": "change_case:english_lowercase", "kwargs": {}}]
+    assert R.if_reward("p", c, "keyword: tree\nall lowercase text here ok", False).reward == 0.0
+    assert R.if_reward("p", c, "all lowercase text here ok", True).reward == 0.0
+
+
+def test_dispatch():
+    item = {"task": "math", "target": "4"}
+    assert asyncio.run(R.score(item, "ANSWER: 4", False)).reward == 1.0
+    citem = {"task": "code", "tests": TESTS, "hidden_tests": HIDDEN}
+    assert asyncio.run(R.score(citem, GOOD, False)).reward == 1.0
