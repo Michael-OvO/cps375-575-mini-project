@@ -115,3 +115,19 @@ def test_calibrate_records_before_scoring_and_survives_score_error(monkeypatch):
     assert [r["id"] for r in rows] == ["ok", "bad"]
     assert rows[1]["reasons"] == ["score_error"] * C.G
     assert led.calls.count("sample") == 2 and led.calls.count("prefill") == 2
+
+
+def test_check_plan_refuses_zero_steps_and_reserve_breach():
+    assert S.check_plan(10, 3.0, 20.0, 135.0) == pytest.approx(115.0)
+    with pytest.raises(SystemExit):
+        S.check_plan(0, 3.0, 20.0, 135.0)
+    with pytest.raises(SystemExit):
+        S.check_plan(30, 3.0, 20.0, 135.0)  # 90 > 115 - 27
+
+
+def test_check_overwrite_after_training_started(tmp_path):
+    S.check_overwrite(False, tmp_path)
+    (tmp_path / "train_log.jsonl").write_text("{}")
+    with pytest.raises(SystemExit):
+        S.check_overwrite(False, tmp_path)
+    S.check_overwrite(True, tmp_path)

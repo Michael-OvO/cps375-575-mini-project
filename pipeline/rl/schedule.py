@@ -7,13 +7,14 @@ import random
 
 from pipeline import jsonl
 from pipeline.config import RUNS, SEED
-from pipeline.rl.ledger import cost
+from pipeline.rl.ledger import Ledger, cost
 
 PRIOR = {"if": 0.40, "math": 0.35, "code": 0.25}
 MAX_MOVE = 0.10
 MIN_INFORMATIVE = 0.25
 CAPS = {"math": 4096, "code": 4096, "if": 1024}
 SMOKE_STEPS = 3
+EVAL_RESERVE = 27.0  # USD kept for checkpoint evals and Phase 5
 PROMPT_TOKENS = 300  # planning estimate per prompt; the ledger records the real tokens
 MARGIN = 1.25 * 1.10  # 25% general margin, 10% for gated SFT
 
@@ -86,16 +87,36 @@ def build(pools: dict[str, list[dict]], summary: dict, per_step: dict[str, int],
     return sched
 
 
+def check_plan(steps: int, usd: float, spent: float, cap: float) -> float:
+    """Refuse a plan with no steps or one that would eat the eval/Phase 5 reserve; return the headroom."""
+    headroom = cap - spent
+    if steps < 1:
+        raise SystemExit(f"refusing: {steps} main-run steps (budget below one step at ${usd:.2f})")
+    if steps * usd > headroom - EVAL_RESERVE:
+        raise SystemExit(f"refusing: {steps} steps x ${usd:.2f} = ${steps * usd:.2f} exceeds headroom "
+                         f"${headroom:.2f} (cap ${cap:.2f} - spent ${spent:.2f}) minus ${EVAL_RESERVE:.0f} reserve")
+    return headroom
+
+
+def check_overwrite(force: bool, root=RUNS / "rl1") -> None:
+    if (root / "train_log.jsonl").exists() and not force:
+        raise SystemExit("refusing: train_log.jsonl exists, so training has started and the prompt plan must not "
+                         "change; pass --force to override")
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--budget", type=float, help="USD for main-run steps; steps = budget / step_usd")
     g.add_argument("--steps", type=int, help="explicit number of main-run steps")
     p.add_argument("--summary", default=str(RUNS / "rl1" / "calibration" / "summary.json"))
+    p.add_argument("--force", action="store_true", help="overwrite the schedule after training has started")
     a = p.parse_args()
+    check_overwrite(a.force)
     summary = json.loads(open(a.summary).read())
     pools = {t: jsonl.read(RUNS / "rl1" / "pools" / f"{t}.jsonl") for t in PRIOR}
     cal = jsonl.read(RUNS / "rl1" / "calibration" / "items.jsonl")
+    cal = [r for r in cal if "score_error" not in r["reasons"]]
     summary["informative"] = {t: sum(max(r["norms"]) - min(r["norms"]) > 1e-9 for r in cal if r["task"] == t)
                               / max(1, sum(r["task"] == t for r in cal)) for t in PRIOR}
     v4dev = json.loads((RUNS / "v4" / "dev.json").read_text())
@@ -108,6 +129,8 @@ def main() -> None:
     per_step = groups_per_step(weights)
     usd = step_usd(per_step, base)
     steps = a.steps if a.steps is not None else int(a.budget / usd)
+    led = Ledger()
+    headroom = check_plan(steps, usd, led.total(), led.cap)
     cfg_path = RUNS / "rl1" / "config.json"
     old = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
     sched = build(pools, summary, per_step, steps + SMOKE_STEPS, random.Random(SEED))  # smoke uses the tail
@@ -119,11 +142,12 @@ def main() -> None:
                  "teacher": old.get("teacher", {"on": False, "lam": 0.0}),
                  "gated_sft": old.get("gated_sft", {"on": True, "mu": 0.5, "max_per_step": 8}), "save_every": 10,
                  "ttl_seconds": 21 * 24 * 3600, "task_weights": weights, "groups_per_step": per_step,
-                 "ema_init": old.get("ema_init", {t: [base[t]["S"], base[t]["L"]] for t in PRIOR}),
-                 "baseline": old.get("baseline", base), "steps": steps}
+                 "ema_init": {t: [base[t]["S"], base[t]["L"]] for t in PRIOR},
+                 "baseline": base, "steps": steps}
     cfg_path.write_text(json.dumps(cfg, indent=1))
     print(json.dumps({"task_weights": weights, "groups_per_step": per_step, "usd_per_step": round(usd, 3),
-                      "steps": steps}, indent=1))
+                      "steps": steps, "projected_main_usd": round(steps * usd, 2),
+                      "headroom_usd": round(headroom, 2)}, indent=1))
 
 
 if __name__ == "__main__":
