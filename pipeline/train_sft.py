@@ -50,7 +50,10 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--start_step", type=int, default=0, help="first 0-indexed step to run (replay)")
     p.add_argument("--ledger", default=None, help="rl1 spend ledger path; reserves and records training cost")
     p.add_argument("--final_state_ttl", default="none", help="'none' or seconds for weights/<name>-final")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.final_state_ttl != "none" and not (args.final_state_ttl.isdigit() and int(args.final_state_ttl) > 0):
+        p.error(f"--final_state_ttl must be 'none' or a positive integer, got {args.final_state_ttl!r}")
+    return args
 
 
 def load_train_rows(run_dir) -> list[dict]:
@@ -187,9 +190,13 @@ def main() -> None:
             save_state(client, log_path, f"{args.name}-step{step}", step)
 
     ttl = None if args.final_state_ttl == "none" else int(args.final_state_ttl)
-    final_state = client.save_state(f"{args.name}-final", ttl_seconds=ttl).result().path
-    jsonl.append(log_path, {"final_state_path": final_state, "ttl_seconds": ttl})
-    print("final state:", final_state)
+    try:  # the sampler checkpoint below matters more than the optimizer state
+        final_state = client.save_state(f"{args.name}-final", ttl_seconds=ttl).result().path
+        jsonl.append(log_path, {"final_state_path": final_state, "ttl_seconds": ttl})
+        print("final state:", final_state)
+    except Exception as e:
+        jsonl.append(log_path, {"final_state_error": str(e)})
+        print(f"final state NOT saved: {e}")
 
     info = {"base_model": STUDENT, "rank": args.rank, "lr": base_lr,
             "batch_size": args.batch_size, "steps": len(plan), "train_tokens": train_tokens,
