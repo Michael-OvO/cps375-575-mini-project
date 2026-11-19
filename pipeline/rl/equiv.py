@@ -37,10 +37,16 @@ def per_task(items: list[dict]) -> dict[str, dict[str, bool]]:
     return out
 
 
-def gate(items_path) -> dict:
+def gate(items_path, min_agree: float = 0.85) -> dict:
+    """Pass iff every task covers every v4 item, has McNemar p > 0.05 and agreement >= min_agree."""
     new = per_task(jsonl.read(items_path))
-    res = {t: compare(load_v4_items(t), new[t]) for t in ("math", "code", "if")}
-    res["passed"] = all(r["p_mcnemar"] > 0.05 and r["agreement"] >= 0.85 for r in res.values())
+    res = {}
+    for t in ("math", "code", "if"):
+        base = load_v4_items(t)
+        shared = len(set(base) & set(new[t]))
+        assert shared == len(base), f"{t}: items file covers {shared} of {len(base)} v4 items"
+        res[t] = compare(base, new[t])
+    res["passed"] = all(r["p_mcnemar"] > 0.05 and r["agreement"] >= min_agree for r in res.values())
     return res
 
 

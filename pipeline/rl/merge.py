@@ -26,12 +26,19 @@ def combine_factors(Bs: list[torch.Tensor], As: list[torch.Tensor], coefs: list[
     Ac = torch.cat([a.float() for a in As], dim=0)  # (k r) x in
     Qb, Rb = torch.linalg.qr(Bc)
     Qa, Ra = torch.linalg.qr(Ac.T)  # Ac = Ra^T Qa^T
-    U, S, Vh = torch.linalg.svd(Rb @ Ra.T)
-    s = S[:r].sqrt()
-    B = (Qb @ U[:, :r]) * s
-    A = s[:, None] * (Vh[:r] @ Qa.T)
-    err = (S[r:].square().sum() / S.square().sum().clamp_min(1e-30)).sqrt().item()
+    U, S, Vh = torch.linalg.svd(Rb @ Ra.T, full_matrices=False)
+    k = min(r, S.shape[0])  # out or in features < r leave fewer singular values; zero-pad back to rank r
+    s = S[:k].sqrt()
+    B = torch.zeros(Bc.shape[0], r)
+    A = torch.zeros(r, Ac.shape[1])
+    B[:, :k] = (Qb @ U[:, :k]) * s
+    A[:k] = s[:, None] * (Vh[:k] @ Qa.T)
+    err = (S[k:].square().sum() / S.square().sum().clamp_min(1e-30)).sqrt().item()
     return B, A, err
+
+
+def rel_err(B: torch.Tensor, A: torch.Tensor, target: torch.Tensor) -> float:
+    return ((B.float() @ A.float() - target).norm() / target.norm().clamp_min(1e-30)).item()
 
 
 def merge_dirs(inputs: list[Path], coefs: list[float], out: Path) -> dict:
@@ -42,18 +49,23 @@ def merge_dirs(inputs: list[Path], coefs: list[float], out: Path) -> dict:
     assert all(set(s) == set(sds[0]) for s in sds), "adapter keys differ"
     mods = lora_modules(sds[0])
     lora_keys = {m + suf for m in mods for suf in (A_SUF, B_SUF)}
-    out_sd, errs = {}, {}
+    out_sd, errs, cast_errs = {}, {}, {}
     for k in set(sds[0]) - lora_keys:
         assert all(torch.equal(s[k], sds[0][k]) for s in sds), f"non-LoRA tensor differs: {k}"
         out_sd[k] = sds[0][k]
     for m in mods:
-        B, A, errs[m] = combine_factors([s[m + B_SUF] for s in sds], [s[m + A_SUF] for s in sds], coefs, r)
+        Bs, As = [s[m + B_SUF] for s in sds], [s[m + A_SUF] for s in sds]
+        B, A, errs[m] = combine_factors(Bs, As, coefs, r)
         out_sd[m + B_SUF] = B.to(sds[0][m + B_SUF].dtype).contiguous()
         out_sd[m + A_SUF] = A.to(sds[0][m + A_SUF].dtype).contiguous()
+        target = sum(c * b.float() @ a.float() for c, b, a in zip(coefs, Bs, As))
+        cast_errs[m] = rel_err(out_sd[m + B_SUF], out_sd[m + A_SUF], target)  # truncation + dtype cast
     out.mkdir(parents=True, exist_ok=True)
     save_file(out_sd, str(out / "adapter_model.safetensors"))
     (out / "adapter_config.json").write_text(json.dumps(cfgs[0], indent=2))
-    return {"modules": len(errs), "max_rel_err": max(errs.values()), "mean_rel_err": sum(errs.values()) / len(errs)}
+    return {"modules": len(errs), "max_rel_err": max(errs.values()), "mean_rel_err": sum(errs.values()) / len(errs),
+            "max_rel_err_cast": max(cast_errs.values()),
+            "mean_rel_err_cast": sum(cast_errs.values()) / len(cast_errs)}
 
 
 def coefs(kind: str, k: int, lam: float | None) -> list[float]:
@@ -79,11 +91,12 @@ def export(state_path: str, out: Path) -> str:
     return ext
 
 
-def upload(d: Path, name: str, rank: int = 32) -> dict:
+def upload(d: Path, name: str) -> dict:
     """Experimental upload (tinker 0.39.0), then a sampler checkpoint from the uploaded weights."""
     import tinker
     from tinker import types
 
+    rank = int(json.loads((d / "adapter_config.json").read_text())["r"])
     rest = tinker.RestClient()
     start = rest.external_weights_upload_start(STUDENT, types.LoraConfig(rank=rank)).result()
     for fname, url in start.urls.items():

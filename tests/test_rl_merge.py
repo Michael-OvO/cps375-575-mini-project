@@ -61,3 +61,23 @@ def test_non_lora_tensors_must_agree(tmp_path):
     b = _adapter(tmp_path, "b", torch.randn(16, 2, generator=g), torch.randn(2, 8, generator=g), {"x": torch.zeros(2)})
     with pytest.raises(AssertionError):
         M.merge_dirs([a, b], [0.5, 0.5], tmp_path / "out")
+
+
+def test_narrow_module_out_features_below_rank():
+    g = torch.Generator().manual_seed(4)
+    Bs = [torch.randn(2, 4, generator=g) for _ in range(2)]  # out = 2 < r = 4
+    As = [torch.randn(4, 48, generator=g) for _ in range(2)]
+    B2, A2, err = M.combine_factors(Bs, As, [0.5, 0.5], 4)
+    target = sum(b @ a for b, a in zip(Bs, As)) / 2
+    assert B2.shape == (2, 4) and A2.shape == (4, 48)
+    assert err < 1e-5 and torch.allclose(B2 @ A2, target, atol=1e-4)
+    B3, A3, _ = M.combine_factors([torch.randn(48, 4, generator=g)], [torch.randn(4, 3, generator=g)], [1.0], 4)
+    assert B3.shape == (48, 4) and A3.shape == (4, 3)  # in = 3 < r
+
+
+def test_merge_dirs_reports_cast_error(tmp_path):
+    g = torch.Generator().manual_seed(5)
+    a = _adapter(tmp_path, "a", torch.randn(16, 2, generator=g), torch.randn(2, 8, generator=g))
+    rep = M.merge_dirs([a], [1.0], tmp_path / "out")
+    assert rep["max_rel_err"] < 1e-5
+    assert 0 < rep["max_rel_err_cast"] < 0.02  # bf16 rounding only

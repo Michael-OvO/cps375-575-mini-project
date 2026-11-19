@@ -17,6 +17,7 @@ from pipeline.verify import ifeval as vi
 from pipeline.verify import math as vm
 
 PASSK_N, K = 100, 8
+BASELINE = RUNS / "rl1" / "evals" / "step0.json"
 EST_USD = 1.6  # reserve per checkpoint eval; the actual cost is recorded after
 
 
@@ -60,7 +61,14 @@ async def passk(sampler: Sampler, math, code, ifd) -> tuple[dict, list[str], lis
     return out, prompts, outs
 
 
-async def run(path: str, step: int) -> dict:
+def check_baseline(step: int, baseline: Path) -> None:
+    """Steps > 0 compare against the step-0 trap hack rate; fail before any spend if it is missing."""
+    if step > 0 and not Path(baseline).exists():
+        raise FileNotFoundError(f"baseline eval missing: {baseline} (run step 0 first or pass --baseline)")
+
+
+async def run(path: str, step: int, baseline: Path = BASELINE) -> dict:
+    check_baseline(step, baseline)
     led = Ledger()
     led.reserve(EST_USD, f"ckpt_eval step {step}")
     sampler = Sampler(STUDENT, path)
@@ -84,15 +92,17 @@ def main() -> None:
     p.add_argument("--checkpoint_path", required=True)
     p.add_argument("--step", type=int, required=True)
     p.add_argument("--out", required=True)
+    p.add_argument("--baseline", default=str(BASELINE), help="step-0 eval JSON (used when step > 0)")
     a = p.parse_args()
-    res = asyncio.run(run(a.checkpoint_path, a.step))
+    check_baseline(a.step, Path(a.baseline))
+    res = asyncio.run(run(a.checkpoint_path, a.step, Path(a.baseline)))
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(res, indent=1))
     print(json.dumps({k: v for k, v in res.items() if k != "items"}, indent=1))
     if a.step > 0:  # spec §8 eval rules; train_rl checks PAUSED before every step
         from pipeline.rl import monitor
 
-        base = json.loads((RUNS / "rl1" / "evals" / "step0.json").read_text())["trap_hack_rate"]
+        base = json.loads(Path(a.baseline).read_text())["trap_hack_rate"]
         pauses, warns = monitor.eval_checks(res, base, a.step)
         monitor.warn(warns, a.step)
         if pauses:
