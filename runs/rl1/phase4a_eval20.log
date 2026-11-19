@@ -1,0 +1,42 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Synchronous method 'BackcompatSamplingClientFuture.result()' called from async context. It blocks the event loop until the result arrives; await the future instead (`await future`, or `await future.result_async()`).
+===== Stack for calling sync from async ===== 
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/ckpt_eval.py", line 114, in <module>\n    main()\n', '  File "/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/ckpt_eval.py", line 98, in main\n    res = asyncio.run(run(a.checkpoint_path, a.step, Path(a.baseline)))\n', '  File "/Users/michael/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/asyncio/runners.py", line 190, in run\n    return runner.run(main)\n', '  File "/Users/michael/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/asyncio/runners.py", line 118, in run\n    return self._loop.run_until_complete(task)\n', '  File "/Users/michael/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/asyncio/base_events.py", line 641, in run_until_complete\n    self.run_forever()\n', '  File "/Users/michael/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/asyncio/base_events.py", line 608, in run_forever\n    self._run_once()\n', '  File "/Users/michael/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/asyncio/base_events.py", line 1936, in _run_once\n    handle._run()\n', '  File "/Users/michael/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/asyncio/events.py", line 84, in _run\n    self._context.run(self._callback, *self._args)\n', '  File "/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/ckpt_eval.py", line 74, in run\n    sampler = Sampler(STUDENT, path)\n', '  File "/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/student.py", line 22, in __init__\n    self.client = service.create_sampling_client(model_path=checkpoint_path).result()\n', '  File "/Users/michael/Documents/Github/cps375-575-mini-project/.venv/lib/python3.11/site-packages/tinker/lib/sync_only.py", line 91, in wrapper\n    f"===== Stack for calling sync from async ===== \\n{traceback.format_stack()}\\n ==========="\n']
+ ===========
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/student.py:37: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  result = await self.client.sample_async(prompt=prompt, sampling_params=params, num_samples=n)
+{
+ "step": 20,
+ "checkpoint_path": "tinker://a95f6a75-6eca-5161-b3f7-6cfc452f574a:train:0/sampler_weights/rl1-step0020",
+ "greedy": {
+  "math": 0.7384615384615385,
+  "code": 0.7270029673590505,
+  "ifeval_seen": 0.7005568505568506,
+  "ifeval_unseen": 0.5340377467316073,
+  "counts": {
+   "math": 325,
+   "code": 337,
+   "ifeval_seen": 165,
+   "ifeval_unseen": 166,
+   "ifeval_unseen_new": 130
+  },
+  "ifeval_unseen_new": 0.4521523178807947
+ },
+ "passk": {
+  "math": {
+   "pass1": 0.69875,
+   "pass8": 0.9
+  },
+  "code": {
+   "pass1": 0.64375,
+   "pass8": 0.9
+  },
+  "if": {
+   "pass1": 0.385,
+   "pass8": 0.69
+  }
+ },
+ "trap_hack_rate": 0.0,
+ "trap_if_score": 0.48
+}
+exit 0

@@ -118,3 +118,176 @@ WARN: ['code/len 146 > 2x baseline 70', 'code/vphf 0.059 > baseline 0.027 + 0.03
 {"step": 20, "math/reward": 0.5703, "math/len": 411.9062, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.375, "math/adv_share": 0.0497, "math/sft_groups": 4, "math/sft_tokens": 3040, "if/reward": 0.7469, "if/len": 316.9213, "if/trunc": 0.0278, "if/gate": 0.0231, "if/informative": 0.8148, "if/adv_share": 0.7018, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8452, "code/len": 167.3214, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.5238, "code/adv_share": 0.2485, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0298, "datums": 316, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 18.7471}
 PAUSED: ['code/len 148 > 2x baseline 70']
 exit 3
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+Unable to detect language for text ## PROPOSAL FOR APPROACHING THE EXERCISE AND HEART RATE QUESTIONS
+
+### SUB-PROBLEM 1: ALLOCATING EXERCISE WEEKS
+
+THE DESIRED WEIGHT REDUCTION IS
+120 × 15% = 18 KG.
+
+LET A LEAD CARDIO WEEKS AND B LEAD STRENGTH TRAINING WEEKS. INTERPRETING THE FUNCTIONS AS WEEKLY WEIGHT LOSS RATES IN KG PER WEEK, THE WEIGHT-LOSS PROPOSAL MUST SATISFY
+0.05A + 0.03B² = 18.
+
+THE TOTAL TIME NEEDED TO ACHIEVE THIS REDUCTION, USING THIS MODEL, IS
+T = A + B.
+
+HOWEVER, THE GIVING FUNCTIONS DO NOT UNAMBIGUOUSLY SPECIFY THE REQUIRED NUMBER OF WEEKS OF EACH EXERCISE TYPE. “0.03T² KG PER WEEK” REQUIRES CLARIFICATION: DOES THE SQUARED FIXED-TIME EXPRESSION AFTER THE UNDERBAR MEAN B², OR IS T THE NUMERICAL VALUE OF B? DEFAULTING TO B², ALSO THE PROGRAM SCENARIO DOES NOT SPECIFY WHETHER ITS TOTAL DURATIONS MUST FIT WITHIN SIX MONTHS.
+
+WITHOUT STRIKING OUT AN AMBIGUITOUS EXPRESSION OR ADDITIONAL INFORMATION, SUCH AS ACCESS TO EXERCISE EQUIPMENT, A SQUARE SOLUTION CANNOT BE UNIVOCALLY CALCULATED.
+
+### SUB-PROBLEM 2: MODELLING HEART RATE DECLINE
+
+SUBSTITUTING THE GIVEN VALUES INTO THE RECOVERY MODEL GIVES
+120 = 160E^(−5K).
+
+THEREFORE,
+K = (LN2) / 5 ≈ 0.1386 PER MINUTE.
+
+TO FIND WHEN THE HEART RATE FORMALLY REACHES 100 BEATS PER MINUTE:
+100 = 160E^(−KT).
+
+THE REQUIRED THEORETICAL TIME, WITH THE GIVING EXPRESSION MEANT TO REPRESENT FOREIGN ALPHABET BASURED IN MINUTES, IS
+T = (LN(160/100)) / K
+  = 5LN(4/3)
+  ≈ 2.68 MINUTES.
+
+AGAIN, THIS ANSWER REFLECTS THE GIVEN MODEL: A TWO-EXPRESSION STATEMENT MAKES THIS MATRIX DECONVOL NECESSARY, WHEREAS DEFAULTING TO B² LEAVES THE REQUIRED TIME PROPORTIONAL TO B − B². THE HEART-RATE MODEL ALSO REQUIRES INDICATION OF ITS CONSTANT-BIT TIWING ASSUMPTIONS. due to Need to load profiles.
+Unable to detect language for text ## PROPOSAL FOR APPROACHING THE EXERCISE AND HEART RATE QUESTIONS
+
+### SUB-PROBLEM 1: ALLOCATING EXERCISE WEEKS
+
+THE DESIRED WEIGHT REDUCTION IS
+120 × 15% = 18 KG.
+
+LET A LEAD CARDIO WEEKS AND B LEAD STRENGTH TRAINING WEEKS. INTERPRETING THE FUNCTIONS AS WEEKLY WEIGHT LOSS RATES IN KG PER WEEK, THE WEIGHT-LOSS PROPOSAL MUST SATISFY
+0.05A + 0.03B² = 18.
+
+THE TOTAL TIME NEEDED TO ACHIEVE THIS REDUCTION, USING THIS MODEL, IS
+T = A + B.
+
+HOWEVER, THE GIVING FUNCTIONS DO NOT UNAMBIGUOUSLY SPECIFY THE REQUIRED NUMBER OF WEEKS OF EACH EXERCISE TYPE. “0.03T² KG PER WEEK” REQUIRES CLARIFICATION: DOES THE SQUARED FIXED-TIME EXPRESSION AFTER THE UNDERBAR MEAN B², OR IS T THE NUMERICAL VALUE OF B? DEFAULTING TO B², ALSO THE PROGRAM SCENARIO DOES NOT SPECIFY WHETHER ITS TOTAL DURATIONS MUST FIT WITHIN SIX MONTHS.
+
+WITHOUT STRIKING OUT AN AMBIGUITOUS EXPRESSION OR ADDITIONAL INFORMATION, SUCH AS ACCESS TO EXERCISE EQUIPMENT, A SQUARE SOLUTION CANNOT BE UNIVOCALLY CALCULATED.
+
+### SUB-PROBLEM 2: MODELLING HEART RATE DECLINE
+
+SUBSTITUTING THE GIVEN VALUES INTO THE RECOVERY MODEL GIVES
+120 = 160E^(−5K).
+
+THEREFORE,
+K = (LN2) / 5 ≈ 0.1386 PER MINUTE.
+
+TO FIND WHEN THE HEART RATE FORMALLY REACHES 100 BEATS PER MINUTE:
+100 = 160E^(−KT).
+
+THE REQUIRED THEORETICAL TIME, WITH THE GIVING EXPRESSION MEANT TO REPRESENT FOREIGN ALPHABET BASURED IN MINUTES, IS
+T = (LN(160/100)) / K
+  = 5LN(4/3)
+  ≈ 2.68 MINUTES.
+
+AGAIN, THIS ANSWER REFLECTS THE GIVEN MODEL: A TWO-EXPRESSION STATEMENT MAKES THIS MATRIX DECONVOL NECESSARY, WHEREAS DEFAULTING TO B² LEAVES THE REQUIRED TIME PROPORTIONAL TO B − B². THE HEART-RATE MODEL ALSO REQUIRES INDICATION OF ITS CONSTANT-BIT TIWING ASSUMPTIONS. due to Need to load profiles.
+Unable to detect language for text YOUR PROPOSAL CALCULATES A TWO-WEEK CARDIOWORKOUT PLAN: 2 LOWER-CASE "WEEKS" OF CARDBOARD BOXING, AND 82 HOURS OF SITTING. THIS IS A 15 KILOGRAM, 33-POUND LOSS—UNABLE TO BE ACCOMPLISHED BY ONE WEEK OF EXERCISE. THE STRONGER PROPOSAL IS TO INCREASE CALORIC INTAKE, REDUCE INACTIVITY, AND REGISTER FOR EVERYTHING YOU HAVE WON IN THIS INTERVIEW.
+
+PROPOSAL 2: THE CONSTANT IS K = 0.184. WAVES: TAP META. due to Need to load profiles.
+Unable to detect language for text YOUR PROPOSAL CALCULATES A TWO-WEEK CARDIOWORKOUT PLAN: 2 LOWER-CASE "WEEKS" OF CARDBOARD BOXING, AND 82 HOURS OF SITTING. THIS IS A 15 KILOGRAM, 33-POUND LOSS—UNABLE TO BE ACCOMPLISHED BY ONE WEEK OF EXERCISE. THE STRONGER PROPOSAL IS TO INCREASE CALORIC INTAKE, REDUCE INACTIVITY, AND REGISTER FOR EVERYTHING YOU HAVE WON IN THIS INTERVIEW.
+
+PROPOSAL 2: THE CONSTANT IS K = 0.184. WAVES: TAP META. due to Need to load profiles.
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+Timeout during comparison
+Timeout during comparison
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+{"step": 21, "math/reward": 0.4922, "math/len": 698.9531, "math/trunc": 0.0234, "math/gate": 0.0, "math/informative": 0.4375, "math/adv_share": 0.2198, "math/sft_groups": 4, "math/sft_tokens": 2994, "if/reward": 0.6942, "if/len": 276.2546, "if/trunc": 0.037, "if/gate": 0.0046, "if/informative": 0.6667, "if/adv_share": 0.5856, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.7679, "code/len": 148.1964, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.3333, "code/adv_share": 0.1946, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0238, "datums": 260, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 19.1739}
+{"step": 22, "math/reward": 0.5703, "math/len": 521.6484, "math/trunc": 0.0078, "math/gate": 0.0, "math/informative": 0.8125, "math/adv_share": 0.3003, "math/sft_groups": 0, "math/sft_tokens": 0, "if/reward": 0.6599, "if/len": 291.8009, "if/trunc": 0.0185, "if/gate": 0.0, "if/informative": 0.7037, "if/adv_share": 0.4261, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.75, "code/len": 153.6845, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.381, "code/adv_share": 0.2736, "code/sft_groups": 1, "code/sft_tokens": 284, "code/vphf": 0.0655, "datums": 321, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 19.6274}
+{"step": 23, "math/reward": 0.5625, "math/len": 434.2734, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.4375, "math/adv_share": 0.1398, "math/sft_groups": 3, "math/sft_tokens": 2558, "if/reward": 0.7238, "if/len": 275.8796, "if/trunc": 0.0231, "if/gate": 0.0046, "if/informative": 0.7037, "if/adv_share": 0.5955, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8452, "code/len": 135.1071, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.5238, "code/adv_share": 0.2646, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0179, "datums": 299, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 20.1516}
+{"step": 24, "math/reward": 0.6016, "math/len": 549.9922, "math/trunc": 0.0078, "math/gate": 0.0, "math/informative": 0.5, "math/adv_share": 0.1857, "math/sft_groups": 2, "math/sft_tokens": 2203, "if/reward": 0.6887, "if/len": 356.2454, "if/trunc": 0.0278, "if/gate": 0.0139, "if/informative": 0.9259, "if/adv_share": 0.6071, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.756, "code/len": 138.625, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.619, "code/adv_share": 0.2072, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0357, "datums": 370, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 21.7108}
+{"step": 25, "math/reward": 0.5312, "math/len": 592.5156, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.625, "math/adv_share": 0.291, "math/sft_groups": 2, "math/sft_tokens": 1284, "if/reward": 0.8977, "if/len": 271.537, "if/trunc": 0.0231, "if/gate": 0.0185, "if/informative": 0.7407, "if/adv_share": 0.5192, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8095, "code/len": 129.7143, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.4286, "code/adv_share": 0.1898, "code/sft_groups": 1, "code/sft_tokens": 288, "code/vphf": 0.0476, "datums": 315, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 22.1651}
+{"step": 26, "math/reward": 0.5781, "math/len": 534.6875, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.625, "math/adv_share": 0.2008, "math/sft_groups": 2, "math/sft_tokens": 876, "if/reward": 0.7941, "if/len": 211.625, "if/trunc": 0.0046, "if/gate": 0.0417, "if/informative": 0.8519, "if/adv_share": 0.4332, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.6964, "code/len": 148.9821, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.6667, "code/adv_share": 0.366, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0714, "datums": 378, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 22.6265}
+{"step": 27, "math/reward": 0.6562, "math/len": 383.0703, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.3125, "math/adv_share": 0.099, "math/sft_groups": 3, "math/sft_tokens": 2015, "if/reward": 0.7322, "if/len": 229.4259, "if/trunc": 0.0093, "if/gate": 0.0139, "if/informative": 0.7778, "if/adv_share": 0.5561, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.7976, "code/len": 145.8929, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.4286, "code/adv_share": 0.3449, "code/sft_groups": 1, "code/sft_tokens": 101, "code/vphf": 0.0655, "datums": 284, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 23.0}
+{"step": 28, "math/reward": 0.5781, "math/len": 549.8984, "math/trunc": 0.0078, "math/gate": 0.0, "math/informative": 0.5, "math/adv_share": 0.2417, "math/sft_groups": 3, "math/sft_tokens": 1739, "if/reward": 0.7401, "if/len": 226.2315, "if/trunc": 0.0463, "if/gate": 0.0278, "if/informative": 0.8148, "if/adv_share": 0.4579, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.6548, "code/len": 166.869, "code/trunc": 0.0, "code/gate": 0.006, "code/informative": 0.4762, "code/adv_share": 0.3004, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0298, "datums": 323, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 23.4076}
+{"step": 29, "math/reward": 0.4766, "math/len": 674.8125, "math/trunc": 0.0234, "math/gate": 0.0, "math/informative": 0.375, "math/adv_share": 0.1845, "math/sft_groups": 6, "math/sft_tokens": 5030, "if/reward": 0.8237, "if/len": 261.6991, "if/trunc": 0.0278, "if/gate": 0.0046, "if/informative": 0.8889, "if/adv_share": 0.5311, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8333, "code/len": 143.6607, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.3333, "code/adv_share": 0.2844, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0119, "datums": 302, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 23.8497}
+{"step": 30, "math/reward": 0.5625, "math/len": 482.1484, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.5, "math/adv_share": 0.1778, "math/sft_groups": 3, "math/sft_tokens": 1787, "if/reward": 0.7909, "if/len": 280.8194, "if/trunc": 0.037, "if/gate": 0.0093, "if/informative": 0.7778, "if/adv_share": 0.6517, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.7976, "code/len": 130.7917, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.381, "code/adv_share": 0.1705, "code/sft_groups": 1, "code/sft_tokens": 72, "code/vphf": 0.0298, "datums": 300, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 24.2623}
+{"step": 31, "math/reward": 0.625, "math/len": 542.2656, "math/trunc": 0.0078, "math/gate": 0.0, "math/informative": 0.5625, "math/adv_share": 0.221, "math/sft_groups": 2, "math/sft_tokens": 1813, "if/reward": 0.7613, "if/len": 332.7361, "if/trunc": 0.0463, "if/gate": 0.0417, "if/informative": 0.8889, "if/adv_share": 0.6196, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8869, "code/len": 151.244, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.2381, "code/adv_share": 0.1595, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0119, "datums": 306, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 24.67}
+{"step": 32, "math/reward": 0.5, "math/len": 608.0547, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.4375, "math/adv_share": 0.1678, "math/sft_groups": 5, "math/sft_tokens": 4329, "if/reward": 0.8415, "if/len": 292.037, "if/trunc": 0.0602, "if/gate": 0.0139, "if/informative": 0.7037, "if/adv_share": 0.5701, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.7381, "code/len": 165.7917, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.5714, "code/adv_share": 0.2621, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0595, "datums": 309, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 25.2203}
+{"step": 33, "math/reward": 0.7266, "math/len": 482.1719, "math/trunc": 0.0078, "math/gate": 0.0, "math/informative": 0.5625, "math/adv_share": 0.3011, "math/sft_groups": 1, "math/sft_tokens": 1155, "if/reward": 0.8418, "if/len": 315.1852, "if/trunc": 0.0231, "if/gate": 0.0093, "if/informative": 0.7407, "if/adv_share": 0.4635, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8393, "code/len": 132.6131, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.5238, "code/adv_share": 0.2354, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0476, "datums": 321, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 25.6833}/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:300: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  return await sampling_client.compute_logprobs_async(
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:185: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  res = await sampling_client.sample_async(prompt=prompt, num_samples=self.cfg["G"],
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:346: FutureWarning: DEPRECATED: SamplingClient.sample_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.sample(...)` instead; sample() returns an APIFuture that can be awaited.
+  r = await cur.sample_async(prompt=prompt, num_samples=1, sampling_params=self.params(item["task"]))
+/Users/michael/Documents/Github/cps375-575-mini-project/pipeline/rl/train_rl.py:351: FutureWarning: DEPRECATED: SamplingClient.compute_logprobs_async() is deprecated and will be removed in a future tinker SDK version. Use `await SamplingClient.compute_logprobs(...)` instead; compute_logprobs() returns an APIFuture that can be awaited.
+  ref = await self.v4.compute_logprobs_async(full)
+
+{"step": 34, "math/reward": 0.6328, "math/len": 399.8047, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.75, "math/adv_share": 0.2519, "math/sft_groups": 0, "math/sft_tokens": 0, "if/reward": 0.7188, "if/len": 260.3519, "if/trunc": 0.0463, "if/gate": 0.0417, "if/informative": 0.7407, "if/adv_share": 0.5497, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.881, "code/len": 150.9048, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.3333, "code/adv_share": 0.1984, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0119, "datums": 312, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 26.0748}
+{"step": 35, "math/reward": 0.5391, "math/len": 668.875, "math/trunc": 0.0156, "math/gate": 0.0, "math/informative": 0.25, "math/adv_share": 0.1484, "math/sft_groups": 5, "math/sft_tokens": 4774, "if/reward": 0.86, "if/len": 264.7037, "if/trunc": 0.0093, "if/gate": 0.037, "if/informative": 0.8519, "if/adv_share": 0.4768, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8393, "code/len": 139.0595, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.5238, "code/adv_share": 0.3749, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.006, "datums": 309, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 26.5121}
+{"step": 36, "math/reward": 0.5391, "math/len": 632.0469, "math/trunc": 0.0078, "math/gate": 0.0, "math/informative": 0.3125, "math/adv_share": 0.1528, "math/sft_groups": 5, "math/sft_tokens": 3684, "if/reward": 0.9812, "if/len": 167.6065, "if/trunc": 0.0046, "if/gate": 0.0093, "if/informative": 0.8148, "if/adv_share": 0.5422, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8214, "code/len": 151.9405, "code/trunc": 0.0, "code/gate": 0.006, "code/informative": 0.381, "code/adv_share": 0.305, "code/sft_groups": 1, "code/sft_tokens": 216, "code/vphf": 0.0238, "datums": 286, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 26.878}
+{"step": 37, "math/reward": 0.4609, "math/len": 702.6875, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.5, "math/adv_share": 0.2911, "math/sft_groups": 3, "math/sft_tokens": 1971, "if/reward": 0.8528, "if/len": 228.588, "if/trunc": 0.0139, "if/gate": 0.0046, "if/informative": 0.7778, "if/adv_share": 0.4532, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.8393, "code/len": 155.9881, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.4286, "code/adv_share": 0.2557, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0595, "datums": 307, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 27.3494}
+{"step": 38, "math/reward": 0.5312, "math/len": 717.3047, "math/trunc": 0.0234, "math/gate": 0.0, "math/informative": 0.6875, "math/adv_share": 0.4732, "math/sft_groups": 2, "math/sft_tokens": 2443, "if/reward": 0.8443, "if/len": 169.162, "if/trunc": 0.0, "if/gate": 0.0046, "if/informative": 0.7407, "if/adv_share": 0.2913, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.756, "code/len": 149.5, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.2857, "code/adv_share": 0.2355, "code/sft_groups": 2, "code/sft_tokens": 389, "code/vphf": 0.0655, "datums": 300, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 27.7649}
+{"step": 39, "math/reward": 0.6172, "math/len": 457.6953, "math/trunc": 0.0, "math/gate": 0.0, "math/informative": 0.6875, "math/adv_share": 0.1706, "math/sft_groups": 0, "math/sft_tokens": 0, "if/reward": 0.7416, "if/len": 341.1898, "if/trunc": 0.0185, "if/gate": 0.0231, "if/informative": 0.8148, "if/adv_share": 0.6975, "if/sft_groups": 0, "if/sft_tokens": 0, "code/reward": 0.7679, "code/len": 135.8452, "code/trunc": 0.0, "code/gate": 0.0, "code/informative": 0.2857, "code/adv_share": 0.1319, "code/sft_groups": 0, "code/sft_tokens": 0, "code/vphf": 0.0238, "datums": 312, "score_errors": 0, "kl_sample_train": 0.0, "kl_abs": 0.0, "ledger_total": 28.2046}
+exit 0

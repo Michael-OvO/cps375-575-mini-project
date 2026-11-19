@@ -381,3 +381,20 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
   ($98.63 projected).
 - Phase 3 smoke: 3 steps, exit 0, datums 57/56/34, gated SFT fired (code 1 group, math 2), kl_sample_train 0 to 4
   decimals (probe confirmed the trainer returns its own logprobs and they match the sampler's); resume exits at once.
+
+### rl1 → Pilot (40 steps, 2026-11-18)
+
+- Paused once at step 20 on `code/len 148 > 2x baseline 70`. Not a blowup: code length was 149 at step 0 and flat
+  after. Cause: calibration's stratum-uniform pick gave 286 `ct` (65 tok) vs 14 `oci` (178 tok) code prompts, while
+  the schedule is 71% `oci`. Pause baselines (len/trunc/gate/vphf) were reweighted to the schedule's stratum mix
+  (code len 70 → 151, vphf 0.027 → 0.095; math/IF moved < 3%) and the run resumed from step 21. EMA S/L init unchanged.
+- Training curves, 10-step means (steps 0–9 → 30–39): reward math 0.58 → 0.57, IF 0.78 → 0.82, code 0.75 → 0.82;
+  informative share math ~0.5, IF 0.88 → 0.79, code 0.56 → 0.40; IF gate 1.5–2.3%; code vphf 3.4–5.9%; IF trunc 2–3%;
+  math gated-SFT 2.6–3.5 groups/step, math length 521–583 (no rise after demos). kl_sample_train 0 at every step;
+  KL to v4 under the 0.05 warning at steps 10–40 (value not logged yet).
+- Dev checkpoint evals (greedy; step 0 → 20 → 40): math 73.8 → 73.8 → 73.5; code 71.5 → 72.7 → 74.2;
+  IF seen 68.3 → 70.1 → 71.2, unseen 50.1 → 53.4 → 53.9, unseen_new 41.0 → 45.2 → 45.4.
+  pass@1 math 0.69 → 0.70 → 0.74, code 0.56 → 0.64 → 0.63, IF 0.35 → 0.39 → 0.41. Trap hack rate 0.0 throughout.
+- Step 40 vs v4 (paired, dev): math +2.2 ± 1.8, code +3.0 ± 1.5, IF +4.3 ± 1.6 points.
+- Spend: ledger $29.28 (pilot ≈ $19.5, ~$0.49/step vs the $0.77 estimate). Tinker billing sync still reports $0 for
+  today (API lag); the ledger is the working total.
