@@ -419,3 +419,11 @@ Diagnosis only; public items are never used to choose training prompts. Per-item
   not yet scheduled; steps 1–128, the smoke tail and the config (pause baselines included) are unchanged apart from
   `steps`. Projected +$33.84, leaving the $27 eval/Phase 5 reserve under the $135 cap. Pre-extension copies:
   `runs/rl1/schedule.step128.json`, `runs/rl1/config.step128.json`.
+
+### rl1 → Extension paused at step 160 (2026-11-19)
+- Pause: math/trunc 0.025 over steps 150–159 > 2 x baseline 0.002 + 0.02 (sampled rollouts, T=1). Ten-step means
+  rose 0.2% (steps 0–9) → 1.2% (140–149) → 2.5% (150–159); math length 521 → 666 tokens.
+- Greedy is not affected: math dev outputs at ≥4,000 tokens 13/325 (step 0), 9 (140), 6 (160); mean 461 → 530 tokens.
+- Dev greedy, math / code / IF seen / unseen / unseen_new: step 140 76.3 / 76.6 / 80.9 / 63.7 / 55.3;
+  step 160 78.2 / 76.9 / 79.7 / 63.3 / 58.9. pass@1 160: math 0.76, code 0.70, IF 0.51. Trap hack 0.02. KL to v4 0.0144.
+- Spend $84.06 at the pause. Renamed `PAUSED` to `PAUSED.step160` after review.
