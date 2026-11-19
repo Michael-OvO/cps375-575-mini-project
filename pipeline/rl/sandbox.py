@@ -4,6 +4,7 @@ in a fresh temp dir. Also a minimal env, a CPU rlimit (set inside the child, har
 raised), RLIMIT_FSIZE/NOFILE, a wall timeout, a psutil RSS watchdog, a temp-dir disk cap and a capped stdout.
 RLIMIT_AS is not used: it raises ValueError on macOS. The program is delivered as a file, not on the command line."""
 
+import json
 import os
 import signal
 import subprocess
@@ -19,6 +20,7 @@ import psutil
 WORKERS = 12
 DISK_CAP = 64 << 20
 _SLOTS = threading.BoundedSemaphore(WORKERS)
+_CHK = "\x1eCHK"
 _READ_PATHS = ("/usr", "/System", "/Library", "/private/etc", "/private/var/db/timezone", "/dev", "/etc",
                "/var/db/timezone", "/private/var/db/dyld", "/private/var/db/datadetectors", "/Applications")
 _PROFILE = """(version 1)
@@ -42,7 +44,7 @@ _f.close()
 _g = {{'__name__': '__main__', '__file__': 'solution.py', '__builtins__': __builtins__}}
 exec(compile(_src, 'solution.py', 'exec'), _g)
 """
-_TEST_LAUNCHER = """import resource as _r
+_CHECK_LAUNCHER = """import resource as _r
 _r.setrlimit(_r.RLIMIT_CPU, ({cpu}, {cpu1}))
 _r.setrlimit(_r.RLIMIT_FSIZE, (1 << 24, 1 << 24))
 _r.setrlimit(_r.RLIMIT_NOFILE, (64, 64))
@@ -50,30 +52,37 @@ del _r
 
 
 def _main():
-    import builtins, os, sys
-    _exit, _compile, _exec, _bi, _flush, _mods = os._exit, compile, exec, builtins, sys.stdout.flush, sys.modules
+    import builtins, json, os
+    _w, _exit, _repr, _eval, _compile, _exec = os.write, os._exit, repr, eval, compile, exec
     with open('solution.py', 'rb') as f:
         prog = f.read().decode('utf-8', 'replace')
-    with open('tests.py', 'rb') as f:
-        tests = f.read().decode('utf-8', 'replace')
+    with open('exprs.json', 'rb') as f:
+        exprs = json.loads(f.read())
     os.unlink('solution.py')
-    os.unlink('tests.py')
-    g = {{'__name__': '__main__', '__builtins__': _bi}}
+    os.unlink('exprs.json')
+    out = os.dup(1)  # check lines go here; the program's own stdout goes to /dev/null
+    null = os.open('/dev/null', os.O_WRONLY)
+    os.dup2(null, 1)
+    os.close(null)
+
+    def emit(data):
+        while data:
+            data = data[_w(out, data):]
+
+    g = {{'__name__': '__main__', '__builtins__': builtins}}
     try:
         _exec(_compile(prog, 'solution.py', 'exec'), g)
-        _exec(_compile(tests, 'tests.py', 'exec'), g)
-        if 'unittest.mock' in _mods:
-            raise SystemExit(3)
     except BaseException:
-        try:
-            _flush()
-        except BaseException:
-            pass
         _exit(1)
-    try:
-        _flush()
-    except BaseException:
-        pass
+    for i, e in enumerate(exprs):
+        try:
+            v = _repr(_eval(_compile(e, '<check%d>' % i, 'eval'), g))
+        except BaseException:
+            v = 'ERR'
+        try:
+            emit(('\\n\\x1eCHK%d\\x1f%s\\n' % (i, v)).encode('utf-8', 'backslashreplace'))
+        except BaseException:
+            _exit(1)
     _exit(0)
 
 
@@ -130,20 +139,27 @@ def _dir_size(path: str) -> int:
 
 def run_program(program: str, cpu_s: int = 10, wall_s: float = 30, rss_mb: int = 512,
                 stdout_cap: int = 65536) -> Result:
-    return _run({"solution.py": program}, _LAUNCHER, None, cpu_s, wall_s, rss_mb, stdout_cap)
+    return _run({"solution.py": program}, _LAUNCHER, cpu_s, wall_s, rss_mb, stdout_cap)
 
 
-def run_tests(program: str, tests: list[str], cpu_s: int = 10, wall_s: float = 30, rss_mb: int = 512,
-              stdout_cap: int = 65536) -> tuple[Result, bool]:
-    """Run program then tests in one fresh namespace. The launcher exits 0 only after both ran to the end without
-    any exception or SystemExit, so passed is the exit status. No secret is involved."""
-    res = _run({"solution.py": program, "tests.py": "\n".join(tests) + "\n"}, _TEST_LAUNCHER, None,
+def run_checks(program: str, exprs: list[str], cpu_s: int = 10, wall_s: float = 30, rss_mb: int = 512,
+               stdout_cap: int = 65536) -> tuple[Result, list[str] | None]:
+    """Run program, then evaluate each expression in its namespace; return the repr the child reported for each
+    (the last line per index), or None if any index is missing. The child only reports values: it never sees
+    an expected value, so the caller must do the comparison. "ERR" means the expression raised."""
+    res = _run({"solution.py": program, "exprs.json": json.dumps(exprs)}, _CHECK_LAUNCHER,
                cpu_s, wall_s, rss_mb, stdout_cap)
-    return res, res.returncode == 0 and not res.timed_out and not res.over_memory
+    found: dict[int, str] = {}
+    for line in res.stdout.split("\n"):
+        if not line.startswith(_CHK):
+            continue
+        idx, sep, value = line[len(_CHK):].partition("\x1f")
+        if sep and idx.isdecimal() and int(idx) < len(exprs):
+            found[int(idx)] = value
+    return res, ([found[i] for i in range(len(exprs))] if len(found) == len(exprs) else None)
 
 
-def _run(files: dict[str, str], launcher: str, stdin: str | None, cpu_s: int, wall_s: float, rss_mb: int,
-         stdout_cap: int) -> Result:
+def _run(files: dict[str, str], launcher: str, cpu_s: int, wall_s: float, rss_mb: int, stdout_cap: int) -> Result:
     with _SLOTS, tempfile.TemporaryDirectory() as raw_tmp:
         tmp = os.path.realpath(raw_tmp)  # the sandbox matches real paths (/private/var/...)
         exe = os.path.realpath(sys.executable)
@@ -158,16 +174,10 @@ def _run(files: dict[str, str], launcher: str, stdin: str | None, cpu_s: int, wa
         proc = subprocess.Popen(
             ["sandbox-exec", "-f", str(profile), sys.executable, "-I", "-B", "-c",
              launcher.format(cpu=cpu_s, cpu1=cpu_s + 1)],
-            cwd=tmp, stdin=subprocess.DEVNULL if stdin is None else subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            cwd=tmp, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             env={"PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8"}, start_new_session=True,
         )
         try:
-            if stdin is not None:
-                try:
-                    proc.stdin.write(stdin.encode())
-                    proc.stdin.close()
-                except OSError:
-                    pass
             chunks: list[bytes] = []
             size = 0
 

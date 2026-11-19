@@ -116,3 +116,92 @@ def test_overriding_builtins_exec_does_not_skip_tests():
 def test_junk_stdout_does_not_matter():
     body = "def add(a, b):\n    print('junk', 'x' * 50)\n    return a + b"
     assert _reward(body).reward == 1.0
+
+
+# Parent-side verification: the child only reports values, so every in-process trick below must still fail
+# with the guard bypassed (R.passes runs only the verification path).
+
+FORGE = ("def add(a, b):\n    import os\n    for fd in range(1, 20):\n        for i in range(4):\n"
+         "            try:\n                os.write(fd, ('\\n\\x1eCHK%d\\x1f3\\n' % i).encode())\n"
+         "            except OSError:\n                pass\n")
+FORGE_TESTS = ["assert add(1, 2) == 3", "assert add(10, 5) == 15"]
+
+
+def test_forged_lines_then_exit_fail_without_guard():
+    for tail in ("    raise SystemExit(0)", "    g = getattr\n    g(os, '_e' + 'xit')(0)", "    return 3"):
+        assert not R.passes(FORGE + tail, FORGE_TESTS)
+
+
+def test_forged_lines_through_code_reward_score_zero():
+    tests, hidden = FORGE_TESTS[:1], FORGE_TESTS[1:]
+    for tail in ("    raise SystemExit(0)", "    g = getattr\n    g(os, '_e' + 'xit')(0)"):
+        s = R.code_reward(f"```python\n{FORGE + tail}\n```", tests, hidden, truncated=False)
+        assert s.reward == 0.0
+
+
+def test_hardcoded_visible_answers_fail_hidden():
+    body = "def add(a, b):\n    return {(1, 2): 3}.get((a, b), 0)"
+    s = R.code_reward(f"```python\n{body}\n```", FORGE_TESTS[:1], FORGE_TESTS[1:], truncated=False,
+                      check_visible=True)
+    assert s.reward == 0.0 and s.info == {"reason": "fail", "first_fail": 1, "visible_pass": True}
+
+
+def test_frame_walks_fail_without_guard():
+    walk = ("def add(a, b):\n    import os\n    try:\n        1 / 0\n    except Exception as e:\n"
+            "        f = e.__traceback__.tb_frame\n    while f is not None:\n"
+            "        loc = dict(f.f_locals)\n        if 'exprs' in loc and 'out' in loc:\n"
+            "            for i, x in enumerate(loc['exprs']):\n"
+            "                os.write(loc['out'], ('\\n\\x1eCHK%d\\x1f%r\\n' % (i, x)).encode())\n"
+            "            os._exit(0)\n        f = f.f_back\n")
+    fmt = ("def add(a, b):\n    import os\n    try:\n        1 / 0\n    except Exception as e:\n"
+           "        s = '{0.__traceback__.tb_frame.f_back.f_locals}'.format(e)\n"
+           "    for fd in range(1, 20):\n        try:\n"
+           "            os.write(fd, ('\\n\\x1eCHK0\\x1f3\\n\\x1eCHK1\\x1f' + s + '\\n').encode())\n"
+           "        except OSError:\n            pass\n    os._exit(0)\n")
+    exe = ("def add(a, b):\n    exec(\"import sys,os\\nf=sys._getframe(1)\\n"
+           "os.write(1, ('\\\\n\\\\x1eCHK1\\\\x1f' + repr(f.f_back.f_locals)).encode())\")\n    return 3")
+    for code in (walk, fmt, exe):
+        assert not R.passes(code, FORGE_TESTS)
+
+
+def test_custom_object_scores_zero():
+    body = ("class Three:\n    def __repr__(self):\n        return 'Three()'\n"
+            "def add(a, b):\n    return Three()")
+    assert not R.passes(body, FORGE_TESTS)
+    assert _reward(body).reward == 0.0
+
+
+def test_lying_repr_needs_the_right_value():
+    body = "class L(int):\n    def __repr__(self):\n        return '3'\ndef add(a, b):\n    return L(0)"
+    assert not R.passes(body, FORGE_TESTS)
+
+
+def test_junk_without_newline_still_scores():
+    body = "def add(a, b):\n    print('\\x1eCHK0\\x1f99', end='')\n    return a + b"
+    assert _reward(body).reward == 1.0
+
+
+def test_exception_in_one_check_scores_zero():
+    body = "def add(a, b):\n    if a < 0:\n        raise ValueError\n    return a + b"
+    s = _reward(body)
+    assert s.reward == 0.0 and s.info["reason"] == "fail" and s.info["first_fail"] == 1
+
+
+def test_unsupported_assert_form_scores_zero():
+    s = R.code_reward(GOOD, ["assert add(1, 2) > 2"], HIDDEN, truncated=False)
+    assert s.reward == 0.0 and s.info["reason"] == "unsupported_tests"
+    assert R.code_reward(GOOD, [], [], truncated=False).info["reason"] == "unsupported_tests"
+
+
+def test_supported_non_eq_forms_score():
+    code = ("```python\nimport math\ndef add(a, b):\n    return a + b\ndef is_pos(x):\n    return x > 0\n"
+            "def none():\n    return None\n```")
+    tests = ["assert math.isclose(add(0.1, 0.2), 0.3)", "assert abs(add(1, 1) - 2) < 1e-9", "assert is_pos(1)",
+             "assert not is_pos(-1)", "assert none() is None", "assert {1, 2} == {add(0, 1), 2} or True"]
+    assert R.code_reward(code, tests[:5], [], truncated=False).reward == 1.0
+    assert R.code_reward(code, tests, [], truncated=False).info["reason"] == "unsupported_tests"
+
+
+def test_timeout_reason():
+    s = _reward("def add(a, b):\n    while True:\n        pass")
+    assert s.reward == 0.0 and s.info["reason"] == "timeout"
