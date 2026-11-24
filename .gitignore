@@ -27,7 +27,7 @@ evaluation/checkpoint_info.json
 evaluation/baseline_results.json
 
 # Pipeline outputs
-data/
+/data/
 runs/**/train.jsonl
 runs/**/*.log
 
