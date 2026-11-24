@@ -11,6 +11,7 @@ import json
 import random
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 import tinker
@@ -23,10 +24,11 @@ from pipeline.config import RUNS, SEED, STUDENT
 from pipeline.rl import advantages as A
 from pipeline.rl import data_gates, demos, monitor, rewards
 from pipeline.rl.ledger import CapExceeded, Ledger, cost, sync_billing
-from pipeline.student import _text
+from pipeline.rl.schedule import SMOKE_STEPS, step_usd
+from pipeline.student import build_prompt, completion_text
 
 TRUNC = "length"  # tinker.types.StopReason = Literal['length', 'stop']
-DOMAINS = ("math", "if", "code")
+DOMAINS = monitor.DOMAINS
 DEMO_TASKS = ("math", "code")
 KL_EVERY = 20  # spec §6.5: KL monitor every 20 steps, 64 rollouts scored under v4
 KL_ROLLOUTS = 64
@@ -93,16 +95,21 @@ def step_metrics(groups: list[dict]) -> dict:
         m[f"{d}/sft_tokens"] = sum(g.get("sft_tokens", 0) for g in gs)
         if d == "code":
             m["code/vphf"] = sum(v is True for g in gs for v in g["vis"]) / n
-        if d == "math" and all(c is not None for g in gs for c in g.get("correct", [None])):
+        if d == "math" and all(_has_verdict(g) for g in gs):
             m["math/acc"] = sum(sum(g["correct"]) for g in gs) / n  # grader accuracy, unshaped
             m["math/loops"] = sum(o is not None for g in gs for o in g.get("loop", []))
     return m
 
 
+def _has_verdict(g: dict) -> bool:
+    """Every sample of the group carries the grader's verdict (math groups only)."""
+    return all(c is not None for c in g.get("correct", [None]))
+
+
 def all_fail(g: dict) -> bool:
     """No sample solved the task. Math uses the grader's verdict, since graded truncation makes rewards negative
     or fractional; code and IF use the reward."""
-    if g["task"] == "math" and all(c is not None for c in g.get("correct", [None])):
+    if g["task"] == "math" and _has_verdict(g):
         return not any(g["correct"])
     return max(g["rewards"]) == 0
 
@@ -114,6 +121,15 @@ def worst_case_usd(groups: list[tuple[str, int]], caps: dict[str, int], G: int, 
     usd = sum(cost("prefill", p) + cost("sample", G * caps[t]) + cost("train", G * (p + caps[t])) for t, p in groups)
     longest = max((p + caps[t] for t, p in groups), default=0)
     return usd + demos * (cost("prefill", longest) + cost("train", longest))
+
+
+def trunc_rules(cfg: dict) -> tuple[bool, dict | None, dict | None]:
+    """(graded_trunc on, monitor trunc_since, monitor trunc_ceiling) from the late-run config keys. A math training
+    cap takes precedence over graded truncation as the start of the truncation window."""
+    gt, mc = cfg.get("graded_trunc", {}), cfg.get("math_train_cap", {})
+    since = mc.get("from_step") if mc.get("on") else gt.get("from_step") if gt.get("on") else None
+    return (bool(gt.get("on", False)), {"math": since} if since is not None else None,
+            {"math": mc["trunc_ceiling"]} if mc.get("on") else None)
 
 
 def log_rows(path: Path, before: int) -> list[dict]:
@@ -138,8 +154,8 @@ class Run:
             for r in jsonl.read(RUNS / "rl1" / "pools" / f"{t}.jsonl"):
                 pools[r["id"]] = r
         self.pools = pools
-        main_steps = self.cfg["steps"]  # schedule.json holds main_steps + 3 smoke steps at the end
-        assert len(sched) == main_steps + 3, "schedule.json must hold the main steps plus 3 smoke steps"
+        main_steps = self.cfg["steps"]  # schedule.json holds the main steps, then SMOKE_STEPS smoke steps
+        assert len(sched) == main_steps + SMOKE_STEPS, "schedule.json must hold the main steps plus the smoke steps"
         if smoke:  # 8 groups from each of the 3 reserved tail steps: disjoint, and never trained by the main run.
             # A seeded sample, not the first 8: schedule.build lists each step's groups task by task.
             rng = random.Random(SEED)
@@ -150,7 +166,7 @@ class Run:
         self.log = self.dir / "train_log.jsonl"
         self.resume_path = self.dir / "resume.json"
         self.demos = demos.load() if self.cfg["gated_sft"]["on"] else {}
-        self.graded_trunc = bool(self.cfg.get("graded_trunc", {}).get("on", False))
+        self.graded_trunc, self.trunc_since, self.trunc_ceiling = trunc_rules(self.cfg)
         self.teacher = None
         if self.cfg["teacher"]["on"] and not smoke:
             from pipeline.rl.teacher import TeacherTerm
@@ -181,16 +197,14 @@ class Run:
         self.v4 = service.create_sampling_client(model_path=self.cfg["v4_sampler"]).result()
 
     def prompt(self, item: dict) -> types.ModelInput:
-        # Same prompt stripping as student.Sampler.answer / calibrate, which the official eval mirrors.
-        return self.renderer.build_generation_prompt([{"role": "user", "content": item["prompt"].strip()}])
+        return build_prompt(self.renderer, item["prompt"])
 
     def params(self, task: str) -> tinker.SamplingParams:
         return tinker.SamplingParams(temperature=1.0, top_p=1.0, stop=self.renderer.get_stop_sequences(),
                                      max_tokens=self.cfg["caps"][task])
 
     def text(self, seq) -> str:
-        # Same completion text as student.Sampler.answer, so rewards score the string the official eval scores.
-        return _text(self.renderer.parse_response(seq.tokens)[0]["content"])
+        return completion_text(self.renderer, seq.tokens)
 
     async def sample(self, sampling_client, items: list[dict], prompts: list[types.ModelInput]) -> list[dict]:
         async def one(item, prompt):
@@ -330,6 +344,7 @@ class Run:
                 datums.append(demo_datum(sd, lp, wgt))
                 g["sft_tokens"] = int(sum(x > 0 for x in sd.loss_fn_inputs["weights"].to_torch().tolist()))
         metrics = {"step": self.step, **step_metrics(groups), "datums": len(datums), "score_errors": len(errors)}
+        kls, kabs = [], []
         if datums:
             fwd = self.client.forward_backward(datums, loss_fn="importance_sampling")
             opt = self.client.optim_step(types.AdamParams(learning_rate=self.cfg["lr"], beta1=0.9, beta2=0.95,
@@ -337,13 +352,10 @@ class Run:
             out = fwd.result()
             opt.result()
             self.led.record(phase, "train", sum(dat.model_input.length for dat in datums), note=note)
-            kls, kabs = [], []
             for slp, o in zip(sampler_lps, out.loss_fn_outputs):
                 tlp = o["logprobs"].to_torch().tolist()[-len(slp):]
                 kls.append(ratio_kl(slp, tlp))
                 kabs.append(abs_kl(slp, tlp))
-        else:
-            kls, kabs = [], []
         # None: no RL datums this step (every group constant; at most gated-SFT datums); monitor skips the KL pause
         metrics["kl_sample_train"] = sum(kls) / len(kls) if kls else None
         metrics["kl_abs"] = sum(kabs) / len(kabs) if kabs else None
@@ -383,11 +395,7 @@ class Run:
 
     def step_estimate(self, step: int) -> float:
         """schedule.step_usd for this step's groups: the per-step estimate the schedule's budget was built on."""
-        from pipeline.rl.schedule import step_usd
-
-        counts: dict[str, int] = {}
-        for i in self.sched[step]:
-            counts[self.pools[i]["task"]] = counts.get(self.pools[i]["task"], 0) + 1
+        counts = Counter(self.pools[i]["task"] for i in self.sched[step])
         return step_usd(counts, self.cfg["baseline"], self.cfg["G"])
 
     def spent_since(self, ts: float) -> float:
@@ -458,18 +466,13 @@ def main() -> None:
         # at checkpoints only, so window warnings are not repeated every step. A monitor error pauses the run:
         # it must never keep training unwatched, nor crash it unsaved.
         try:
-            gt, mc = run.cfg.get("graded_trunc", {}), run.cfg.get("math_train_cap", {})
-            pauses, warns = monitor.train_checks(
-                log_rows(run.log, run.step), run.cfg["baseline"],
-                trunc_since={"math": mc["from_step"] if mc.get("on") else gt["from_step"]} if gt.get("on") or mc.get("on")
-                else None,
-                trunc_ceiling={"math": mc["trunc_ceiling"]} if mc.get("on") else None)
+            pauses, warns = monitor.train_checks(log_rows(run.log, run.step), run.cfg["baseline"],
+                                                 trunc_since=run.trunc_since, trunc_ceiling=run.trunc_ceiling)
             if saved is not None and not a.smoke:
                 if run.step % KL_EVERY == 0:
                     try:
                         kl_v4 = run.kl_to_v4(saved["sampler_path"])
-                        with open(run.dir / "kl_v4.jsonl", "a") as f:
-                            f.write(json.dumps({"step": run.step, "kl_v4": kl_v4}) + "\n")
+                        jsonl.append(run.dir / "kl_v4.jsonl", {"step": run.step, "kl_v4": kl_v4})
                         warns += monitor.kl_warning(kl_v4)
                     except CapExceeded as e:  # state of this step is already saved
                         print("CAP:", e)

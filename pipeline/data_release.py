@@ -14,9 +14,8 @@ import os
 import re
 from pathlib import Path
 
-from pipeline.config import DATA, RUNS
+from pipeline.config import DATA, ROOT, RUNS
 
-ROOT = Path(__file__).resolve().parents[1]
 CARD = ROOT / "docs" / "data" / "README.md"
 CHANGELOG = ROOT / "docs" / "data" / "CHANGELOG.md"
 EVAL_FILES = {"math_dev.jsonl", "code_dev.jsonl", "if_dev.jsonl", "if_dev_new.jsonl", "rl_traps.jsonl"}
@@ -34,23 +33,26 @@ def layout() -> dict[str, Path]:
             out[f"eval/{f.name}"] = f
         elif _SOURCE.match(f.name):
             out[f"sources/{f.name}"] = f
-    for f in sorted(RUNS.glob("v[0-9]*/train.jsonl")):
-        if not re.fullmatch(r"v\d+", f.parent.name):
-            continue  # v4_smoke and similar
-        out[f"mixtures/{f.parent.name}/train.jsonl"] = f
-        if (f.parent / "manifest.json").exists():
-            out[f"mixtures/{f.parent.name}/manifest.json"] = f.parent / "manifest.json"
+    for f in sorted(RUNS.glob("*/train.jsonl")):
+        run = f.parent
+        if not re.fullmatch(r"v\d+", run.name):
+            continue  # rl1, v4_smoke and similar
+        out[f"mixtures/{run.name}/train.jsonl"] = f
+        if (run / "manifest.json").exists():
+            out[f"mixtures/{run.name}/manifest.json"] = run / "manifest.json"
     for f in sorted((RUNS / "rl1" / "pools").glob("*")):
         out[f"rl/pools/{f.name}"] = f
     return out
 
 
 def describe(path: Path) -> dict:
-    h, rows = hashlib.sha256(), 0
+    h, rows, last = hashlib.sha256(), 0, b"\n"
     with path.open("rb") as fh:
-        for line in fh:
-            h.update(line)
-            rows += 1
+        while chunk := fh.read(1 << 20):
+            h.update(chunk)
+            rows += chunk.count(b"\n")
+            last = chunk[-1:]
+    rows += last != b"\n"  # a final line without a newline still counts
     out = {"sha256": h.hexdigest(), "bytes": path.stat().st_size}
     if path.suffix == ".jsonl":
         out["rows"] = rows
@@ -98,7 +100,7 @@ def main() -> None:
 
     files = layout()
     local = manifest(files)
-    remote = _remote_manifest(api, args.repo) if args.cmd == "push" or api.repo_exists(args.repo, repo_type="dataset") else {}
+    remote = _remote_manifest(api, args.repo)
     upd, gone = changed(local, remote)
     size = sum(local[p]["bytes"] for p in upd)
     print(f"{len(local)} files tracked; {len(upd)} to upload ({size / 1e6:.1f} MB)")

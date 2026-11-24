@@ -14,7 +14,7 @@ from pipeline import jsonl
 from pipeline.config import RUNS, SEED, STUDENT
 from pipeline.rl import data_gates, rewards
 from pipeline.rl.ledger import Ledger, cost
-from pipeline.student import Sampler, _text
+from pipeline.student import Sampler, build_prompt, completion_text
 
 OUT = RUNS / "rl1" / "calibration"
 PER_TASK, G = 300, 8
@@ -22,8 +22,7 @@ CAPS = {"math": 4096, "code": 4096, "if": 1024}
 
 
 def _prompt(sampler: Sampler, item: dict):
-    # Same prompt stripping and completion text as student.Sampler.answer, which the official eval mirrors.
-    return sampler.renderer.build_generation_prompt([{"role": "user", "content": item["prompt"].strip()}])
+    return build_prompt(sampler.renderer, item["prompt"])
 
 
 def worst_case_usd(sampler: Sampler, items: list[dict]) -> float:
@@ -110,7 +109,7 @@ async def calibrate(sampler: Sampler, items: list[dict], led: Ledger) -> list[di
         seqs = list(t1.sequences) + list(t0.sequences)
         led.record("2", "sample", sum(len(x.tokens) for x in seqs), note=item["id"])  # paid: record before scoring
         led.record("2", "prefill", 2 * prompt.length, note=item["id"])
-        texts = [_text(sampler.renderer.parse_response(x.tokens)[0]["content"]) for x in seqs]
+        texts = [completion_text(sampler.renderer, x.tokens) for x in seqs]
         truncs = [x.stop_reason == "length" for x in seqs]
         base = {"id": item["id"], "task": item["task"], "stratum": item["stratum"], "lens": [len(x.tokens) for x in seqs[:G]],
                 "trunc": truncs[:G], "samples": texts[:2]}

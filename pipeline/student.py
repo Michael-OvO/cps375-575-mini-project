@@ -11,6 +11,16 @@ def _text(content) -> str:
     return "".join(part.get("text", "") for part in content if isinstance(part, dict))
 
 
+def build_prompt(renderer, text: str):
+    """Stripped like the graded inspect adapter, so dev evals and RL see the official prompt tokens."""
+    return renderer.build_generation_prompt([{"role": "user", "content": text.strip()}])
+
+
+def completion_text(renderer, tokens) -> str:
+    """The completion string the official eval scores."""
+    return _text(renderer.parse_response(tokens)[0]["content"])
+
+
 class Sampler:
     def __init__(self, model: str, checkpoint_path: str | None = None):
         tokenizer = get_tokenizer(model)
@@ -26,8 +36,7 @@ class Sampler:
     async def answer(
         self, text: str, max_tokens: int, temperature: float = 0.0, n: int = 1
     ) -> list[str]:
-        # Stripped like the graded inspect adapter, so dev evals see the same prompt tokens.
-        prompt = self.renderer.build_generation_prompt([{"role": "user", "content": text.strip()}])
+        prompt = build_prompt(self.renderer, text)
         params = tinker.SamplingParams(
             temperature=temperature,
             max_tokens=max_tokens,
@@ -35,4 +44,4 @@ class Sampler:
             top_p=1.0,
         )
         result = await self.client.sample_async(prompt=prompt, sampling_params=params, num_samples=n)
-        return [_text(self.renderer.parse_response(seq.tokens)[0]["content"]) for seq in result.sequences]
+        return [completion_text(self.renderer, seq.tokens) for seq in result.sequences]

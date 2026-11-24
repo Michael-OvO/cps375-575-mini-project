@@ -31,7 +31,6 @@ def _trunc_check(rows: list[dict], d: str, b: dict, late: bool, since: int | Non
     above TRUNC_BACKSTOP pauses, so the domain is never unwatched. `ceiling`: training samples under a cap below the
     eval cap, so truncation is expected to rise by design: the usual line only warns, and only a windowed (or, early,
     single-step) rate above the ceiling pauses; greedy cut-offs at the eval cap are the gate, checked by evals."""
-    msg_late = [], []
     backstop = ceiling if ceiling is not None else TRUNC_BACKSTOP
     if since is None:
         w = rows[-WINDOW:]
@@ -42,14 +41,14 @@ def _trunc_check(rows: list[dict], d: str, b: dict, late: bool, since: int | Non
             if last is not None and last > backstop:
                 return [f"{d}/trunc {last:.3f} > backstop {backstop} at step {w[-1]['step']} "
                         f"(window restarted at step {since})"], []
-            return msg_late
+            return [], []
     tr = _mean(w, f"{d}/trunc")
     if ceiling is not None and tr > ceiling:
         return [f"{d}/trunc {tr:.3f} > ceiling {ceiling} (training cap below eval cap)"], []
     if tr > 2 * b["trunc"] + 0.02:
         msg = f"{d}/trunc {tr:.3f} > 2x baseline {b['trunc']:.3f} + 0.02"
         return ([msg], []) if late and ceiling is None else ([], [msg])
-    return msg_late
+    return [], []
 
 
 def train_checks(rows: list[dict], base: dict, trunc_since: dict[str, int] | None = None,

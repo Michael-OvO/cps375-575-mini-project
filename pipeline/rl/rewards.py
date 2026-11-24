@@ -3,6 +3,7 @@ task, except math with graded_trunc on (see TRUNC_ANSWERED). Pure functions apar
 
 import asyncio
 import signal
+from collections import Counter
 from dataclasses import dataclass, field
 
 from pipeline.preflight import top_level_unsafe
@@ -97,11 +98,8 @@ def loop_onset(text: str, n: int = LOOP_NGRAM, k: int = LOOP_REPEATS) -> float |
     if len(w) < n * k:
         return None
     grams = [" ".join(w[i:i + n]) for i in range(len(w) - n + 1)]
-    counts: dict[str, int] = {}
-    for g in grams:
-        counts[g] = counts.get(g, 0) + 1
-    top = max(counts, key=counts.get)
-    return grams.index(top) / len(w) if counts[top] >= k else None
+    top, count = Counter(grams).most_common(1)[0]  # ties: the first-seen chunk
+    return grams.index(top) / len(w) if count >= k else None
 
 
 async def math_reward(text: str, target: str, truncated: bool, graded_trunc: bool = False) -> Scored:

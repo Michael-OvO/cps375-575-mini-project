@@ -1,4 +1,12 @@
+from types import SimpleNamespace as _NS
+
+import pytest
+import torch
+from tinker import types
+from tinker.types.tensor_data import TensorData
+
 from pipeline import train_sft as T
+from pipeline.rl import train_rl as TR
 
 
 def test_replay_flags_parse():
@@ -64,13 +72,6 @@ def test_final_state_failure_still_saves_and_publishes(tmp_path, monkeypatch):
     assert {"final_state_error": "state save down"} in log
     assert json.loads((run / "checkpoint.json").read_text())["checkpoint_path"] == "tinker://run/r1"
 
-
-import pytest
-import torch
-from tinker import types
-from tinker.types.tensor_data import TensorData
-
-from pipeline.rl import train_rl as TR
 
 
 def test_build_datum_shapes_and_masking():
@@ -147,8 +148,6 @@ def test_log_rows_keeps_last_row_per_step_before_current(tmp_path):
 
 
 # ---- fake-client tests of the loop: no Tinker calls, no network ----
-
-from types import SimpleNamespace as _NS  # noqa: E402
 
 _RUN = TR.Run  # the real class: _main patches TR.Run
 
@@ -255,7 +254,7 @@ def _fake_run(tmp_path, monkeypatch, cap=100.0, lens=(1, 2), steps=2, **kw):
     run.sched = [[i["id"] for i in items]] * steps
     run.led = Ledger(tmp_path / "ledger.jsonl", cap_usd=cap)
     run.teacher, run.saved_step, run.step, run.demos = None, None, 0, {}
-    run.graded_trunc = bool(run.cfg.get("graded_trunc", {}).get("on", False))
+    run.graded_trunc, run.trunc_since, run.trunc_ceiling = TR.trunc_rules(run.cfg)
     run.renderer, run.client = _Renderer(), _Training(lens)
     run.scaler = A.DomainScaler({"math": (0.3, 100), "if": (0.2, 50), "code": (0.4, 200)})
     run.start = lambda service: None

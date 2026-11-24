@@ -4,6 +4,7 @@
 import argparse
 import json
 import random
+from pathlib import Path
 
 from pipeline import jsonl
 from pipeline.config import RUNS, SEED
@@ -103,7 +104,7 @@ def run_extend(extra: int, usd: float, summary_path: str) -> None:
     assert len(sched) == cfg["steps"] + SMOKE_STEPS, "schedule.json must hold the main steps plus the smoke tail"
     led = Ledger()
     headroom = check_plan(extra, usd, led.total(), led.cap)
-    summary = json.loads(open(summary_path).read())
+    summary = json.loads(Path(summary_path).read_text())
     pools = {t: jsonl.read(RUNS / "rl1" / "pools" / f"{t}.jsonl") for t in PRIOR}
     new = extend(sched, cfg["steps"], extra, pools, summary, cfg["groups_per_step"],
                  random.Random(SEED + cfg["steps"]))
@@ -146,7 +147,7 @@ def main() -> None:
             p.error("--extend needs --usd_per_step")
         return run_extend(a.extend, a.usd_per_step, a.summary)
     check_overwrite(a.force)
-    summary = json.loads(open(a.summary).read())
+    summary = json.loads(Path(a.summary).read_text())
     pools = {t: jsonl.read(RUNS / "rl1" / "pools" / f"{t}.jsonl") for t in PRIOR}
     cal = jsonl.read(RUNS / "rl1" / "calibration" / "items.jsonl")
     cal = [r for r in cal if "score_error" not in r["reasons"]]
