@@ -85,7 +85,7 @@ def main() -> None:
     ap.add_argument("--repo", default=os.environ.get("HF_DATA_REPO"))
     args = ap.parse_args()
     if not args.repo:
-        raise SystemExit("set --repo or HF_DATA_REPO (e.g. my-org/cps375-data)")
+        raise SystemExit("set --repo or HF_DATA_REPO (cps375-team/cps375-data)")
     from huggingface_hub import CommitOperationAdd, HfApi
     api = HfApi()
 

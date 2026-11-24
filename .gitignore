@@ -41,3 +41,6 @@ reports/data_preview.html
 runs/rl1/pools/*.jsonl
 runs/rl1/merge/
 runs/rl1/confirm/logs_*/
+/data_hub/
+/data_rl1/
+/data_v[0-9]*/

@@ -1,6 +1,6 @@
 # Data versioning
 
-One private Hugging Face dataset repo holds all our data. Code stays on GitHub; GitHub records which data
+One private Hugging Face dataset repo, `cps375-team/cps375-data`, holds all our data. Code stays on GitHub; GitHub records which data
 version each run used.
 
 ## Layout
@@ -31,9 +31,9 @@ version each run used.
 ## Common commands
 
 ```bash
-export HF_DATA_REPO=<org>/cps375-data
+export HF_DATA_REPO=cps375-team/cps375-data
 .venv/bin/hf download $HF_DATA_REPO --repo-type dataset --local-dir data_hub/             # latest
-.venv/bin/hf download $HF_DATA_REPO --repo-type dataset --revision v4 --local-dir data_v4/ # a version
+.venv/bin/hf download $HF_DATA_REPO --repo-type dataset --revision rl1 --local-dir data_rl1/ # a version
 .venv/bin/python -m pipeline.data_release plan
 .venv/bin/python -m pipeline.data_release push -m "add rl1 shortest-correct distilled data"
 .venv/bin/python -m pipeline.data_release tag v5 -m "v5 SFT trained on this"
